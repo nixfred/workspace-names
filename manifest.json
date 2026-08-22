@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "nixfred.workspace-names",
   "name": "Workspace Names",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Fred Nix & Larry",
   "license": "MIT",
-  "description": "Give Hyprland workspaces a title without touching the numbers in the bar. A small pill slides in under the workspace numbers whenever you switch (\"3  Code\") and slides away again after a moment. Rename with SUPER+SHIFT+R (workspace-name) \u2014 names live in ~/.config/omarchy/workspace-names.json.",
+  "description": "Give Hyprland workspaces a title without touching the numbers in the bar. The focused workspace's name always sits right after the numbers (click it to rename); hover a number for its name; a small pill slides in on switch. Names live in ~/.config/omarchy/workspace-names.json.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   "homepage": "https://github.com/nixfred/workspace-names",
   "barWidget": {
     "displayName": "Workspace Names",
-    "description": "The stock workspace numbers, plus hover a number to see its name and click the chip (or right-click the number) to rename it inline. Replaces omarchy.workspaces in the bar layout.",
+    "description": "The stock workspace numbers, plus the focused workspace's name pinned right after them (click to rename), hover a number to see its name, and an inline editor. Replaces omarchy.workspaces in the bar layout.",
     "category": "System",
     "aliases": [
       "workspaces",

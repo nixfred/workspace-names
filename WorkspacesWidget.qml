@@ -137,13 +137,62 @@ BarWidget {
 
   readonly property real trailingGap: root.vertical ? 0 : Style.spaceReal(1.5)
 
-  implicitWidth: grid.implicitWidth + trailingGap
+  // ---- persistent title slot ----------------------------------------------
+  // The focused workspace's name always lives right after the numbers (bold
+  // when named, dim "Name…" when not). Click it to rename inline. Hidden on a
+  // vertical bar, where there is no room beside the column.
+  readonly property int focusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  readonly property string focusedName: focusedId > 0 ? root.nameFor(focusedId) : ""
+  readonly property bool showTitle: !root.vertical
+  readonly property real titleMinWidth: Style.space(48)
+  readonly property real titleMaxWidth: Style.space(180)
+  readonly property real titleGap: Style.space(6)
+
+  implicitWidth: grid.implicitWidth + (showTitle ? titleGap + titleSlot.width : 0) + trailingGap
   implicitHeight: grid.implicitHeight
+
+  Item {
+    id: titleSlot
+    visible: root.showTitle
+    anchors.left: grid.right
+    anchors.leftMargin: root.titleGap
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: root.showTitle ? Math.max(root.titleMinWidth, Math.min(titleLabel.implicitWidth, root.titleMaxWidth)) : 0
+
+    Text {
+      id: titleLabel
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.left: parent.left
+      width: Math.min(implicitWidth, root.titleMaxWidth)
+      elide: Text.ElideRight
+      text: root.focusedName !== "" ? root.focusedName : "Name…"
+      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      font.pixelSize: Style.font.body
+      font.bold: root.focusedName !== ""
+      font.italic: root.focusedName === ""
+      color: {
+        var fg = root.bar ? root.bar.barForeground : Color.foreground
+        if (titleMouse.containsMouse) return Style.hoverStateColor(fg, Color.accent)
+        return root.focusedName !== "" ? fg : Util.alpha(fg, 0.55)
+      }
+      Behavior on color { ColorAnimation { duration: 120 } }
+    }
+    MouseArea {
+      id: titleMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.IBeamCursor
+      onClicked: if (root.focusedId > 0) root.openEditor(root.focusedId)
+    }
+  }
 
   GridLayout {
     id: grid
-    anchors.fill: parent
-    anchors.rightMargin: root.trailingGap
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: implicitWidth
     columns: root.vertical ? 1 : root.workspaceIds().length
     columnSpacing: root.vertical ? 0 : Style.space(1)
     rowSpacing: root.vertical ? Style.space(2) : 0

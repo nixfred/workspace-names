@@ -21,6 +21,10 @@ from the left). It never steals focus or clicks.
 - Hyprland's real workspace names are untouched (plonk, `hl.dsp.focus` by id,
   etc. all keep working).
 
+## Always-on title (v0.3.0)
+
+The focused workspace's name lives permanently right after the workspace numbers in the left bar section — bold when named, a dim *Name…* when not. Click it to rename inline. Hidden on a vertical bar.
+
 ## Install
 
 ```bash
