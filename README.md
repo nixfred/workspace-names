@@ -25,6 +25,8 @@ from the left). It never steals focus or clicks.
 
 The focused workspace's name lives permanently right after the workspace numbers in the left bar section — bold when named, a dim *Name…* when not. Click it to rename inline. Hidden on a vertical bar.
 
+The widget takes its workspace list and occupancy from `hyprctl workspaces -j` (re-probed on workspace events) instead of Quickshell's model, because Quickshell ignores Hyprland's `changeworkspaceid` event — after a renumber (e.g. [plonk](https://github.com/nixfred/plonk)) the stock model shows the old id as a ghost and the new one as empty.
+
 The slide-in pill that used to appear on every workspace switch is now **off by default** (it doubled the title). Bring it back with `{"_config": {"pill": true}}` in `~/.config/omarchy/workspace-names.json`.
 
 ## Install

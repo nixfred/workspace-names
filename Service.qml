@@ -100,6 +100,19 @@ Item {
     }
   }
 
+  // Hyprland's change_id (plonk renumbering) emits "changeworkspaceid>>old,new"
+  // which Quickshell's workspace model does not apply — the old id lingers as
+  // a ghost and the renumbered one reads as empty. Re-sync the model.
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      var n = event && event.name ? String(event.name) : ""
+      if (n === "changeworkspaceid" || n === "renameworkspace" || n === "moveworkspace") {
+        root.resync()
+      }
+    }
+  }
+
   Connections {
     target: Hyprland
     function onFocusedWorkspaceChanged() {
@@ -144,8 +157,20 @@ Item {
     }
   }
 
+  function resync() {
+    Hyprland.refreshWorkspaces()
+    Hyprland.refreshToplevels()
+  }
+
   IpcHandler {
     target: root.pluginId
+    function resync(): string { root.resync(); return "ok" }
+    function ids(): string {
+      var out = []
+      var v = Hyprland.workspaces.values
+      for (var i = 0; i < v.length; i++) out.push(v[i].id)
+      return JSON.stringify(out)
+    }
     function show(): string { root.show(-1); return "ok" }
     function showId(id: int): string { root.show(id); return "ok" }
     function hide(): string { root.hide(); return "ok" }

@@ -103,13 +103,69 @@ BarWidget {
     return null
   }
 
+  // ---- live truth from hyprctl ------------------------------------------
+  // Quickshell's Hyprland.workspaces model does not apply Hyprland's
+  // "changeworkspaceid" event (plonk renumbering), so old ids linger as
+  // ghosts and renumbered ones read as empty. We therefore take the id list
+  // and occupancy from `hyprctl workspaces -j` (re-probed on every workspace
+  // event, debounced) and only use the model for focus and click targets.
+  property var live: null  // { "3": windows, ... } or null until first probe
+
+  Process {
+    id: wsProbe
+    command: ["hyprctl", "workspaces", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var arr = JSON.parse(this.text || "[]")
+          var m = {}
+          for (var i = 0; i < arr.length; i++) m[String(arr[i].id)] = Number(arr[i].windows) || 0
+          root.live = m
+        } catch (e) {
+          console.warn("workspace-names: bad hyprctl workspaces output: " + e)
+        }
+        root.refreshIds()
+      }
+    }
+  }
+  Timer { id: probeDebounce; interval: 120; onTriggered: wsProbe.running = true }
+  function probe() { probeDebounce.restart() }
+  Component.onCompleted: probe()
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      var n = event && event.name ? String(event.name) : ""
+      switch (n) {
+      case "changeworkspaceid": case "createworkspace": case "destroyworkspace":
+      case "moveworkspace": case "renameworkspace": case "openwindow": case "closewindow":
+      case "movewindow": case "monitorremoved": case "monitoradded":
+        root.probe(); break
+      }
+    }
+  }
+
+  function liveWindows(id) {
+    if (!root.live) return -1
+    var w = root.live[String(id)]
+    return w === undefined ? 0 : w
+  }
+
   function computeWorkspaceIds() {
     var ids = [1, 2, 3, 4, 5]
-    var values = Hyprland.workspaces.values
-    for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+    var fw = Hyprland.focusedWorkspace
+    if (root.live) {
+      for (var k in root.live) {
+        var id = Number(k)
+        if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+      }
+    } else {
+      var values = Hyprland.workspaces.values
+      for (var i = 0; i < values.length; i++) {
+        var vid = values[i].id
+        if (vid > 0 && vid <= 10 && ids.indexOf(vid) === -1) ids.push(vid)
+      }
     }
+    if (fw && fw.id > 0 && fw.id <= 10 && ids.indexOf(fw.id) === -1) ids.push(fw.id)
     ids.sort(function(left, right) { return left - right })
     return ids
   }
@@ -205,7 +261,8 @@ BarWidget {
         required property int modelData
 
         readonly property var workspace: root.workspaceById(modelData)
-        readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
+        readonly property int liveWin: root.liveWindows(modelData)
+        readonly property bool occupied: liveWin >= 0 ? liveWin > 0 : (workspace !== null && workspace.toplevels.values.length > 0)
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
         readonly property string wsName: root.nameFor(modelData)
         readonly property bool named: wsName !== ""
