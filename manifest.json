@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "nixfred.workspace-names",
   "name": "Workspace Names",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Fred Nix & Larry",
   "license": "MIT",
-  "description": "Give Hyprland workspaces a title without touching the numbers in the bar. The focused workspace's name always sits right after the numbers (click it to rename); hover a number for its name; a small pill slides in on switch. Names live in ~/.config/omarchy/workspace-names.json.",
+  "description": "Give Hyprland workspaces a title without touching the numbers in the bar. The focused workspace's name always sits right after the numbers (click it to rename); hover a number for its name; the old slide-in pill is opt-in via _config.pill. Names live in ~/.config/omarchy/workspace-names.json.",
   "kinds": [
     "service",
     "bar-widget"

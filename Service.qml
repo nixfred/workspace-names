@@ -7,12 +7,15 @@ import qs.Commons
 
 // Workspace Names — service plugin.
 //
-// The bar keeps showing plain workspace numbers. This service watches the
-// focused Hyprland workspace and, on every switch, slides a small pill in
-// under the workspace widget showing "<id>  <name>" (or "Workspace <id>" when
-// unnamed), holds it briefly, then slides it out the other way. Names come
-// from ~/.config/omarchy/workspace-names.json ({"3": "Code", ...}) which is
-// watched, so `workspace-name` edits show up instantly.
+// Since v0.3.0 the bar widget shows the focused workspace's name permanently
+// right after the numbers, so the slide-in pill below is OFF by default (it
+// would double-display the name). Opt back in with
+//   {"_config": {"pill": true}} in ~/.config/omarchy/workspace-names.json.
+// When enabled: on every switch a small pill slides in under the workspace
+// widget showing "<id>  <name>" (or "Workspace <id>" when unnamed), holds
+// briefly, then slides out the other way. Names come from the JSON file
+// ({"3": "Code", ...}) which is watched, so `workspace-name` edits show up
+// instantly.
 //
 // IPC (omarchy-shell nixfred.workspace-names <method>):
 //   show          peek the pill for the focused workspace
@@ -42,6 +45,8 @@ Item {
   readonly property int travel: Number(cfg.travel) > 0 ? Number(cfg.travel) : 48
   readonly property int offsetX: cfg.offsetX !== undefined ? Number(cfg.offsetX) : 52
   readonly property int offsetY: cfg.offsetY !== undefined ? Number(cfg.offsetY) : 6
+  // The pill is opt-in now that the bar widget shows the title permanently.
+  readonly property bool pillEnabled: cfg.pill === true
 
   property bool opened: false
   property int currentId: -1
@@ -67,6 +72,7 @@ Item {
   }
 
   function show(id) {
+    if (!root.pillEnabled) return
     if (id === undefined || id === null || id < 1) {
       var fw = Hyprland.focusedWorkspace
       id = fw ? fw.id : -1

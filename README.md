@@ -25,6 +25,8 @@ from the left). It never steals focus or clicks.
 
 The focused workspace's name lives permanently right after the workspace numbers in the left bar section — bold when named, a dim *Name…* when not. Click it to rename inline. Hidden on a vertical bar.
 
+The slide-in pill that used to appear on every workspace switch is now **off by default** (it doubled the title). Bring it back with `{"_config": {"pill": true}}` in `~/.config/omarchy/workspace-names.json`.
+
 ## Install
 
 ```bash
