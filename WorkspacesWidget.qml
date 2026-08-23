@@ -166,9 +166,18 @@ BarWidget {
       }
     }
     if (fw && fw.id > 0 && fw.id <= 10 && ids.indexOf(fw.id) === -1) ids.push(fw.id)
+    // Titled slots are anchors (plonk never moves them): keep them visible
+    // even while empty so you can always jump back to "Browser" on 4.
+    if (root.names) {
+      for (var key in root.names) {
+        var tid = Number(key)
+        if (key.charAt(0) !== "_" && tid > 0 && tid <= 10 && ids.indexOf(tid) === -1) ids.push(tid)
+      }
+    }
     ids.sort(function(left, right) { return left - right })
     return ids
   }
+  onNamesChanged: refreshIds()
 
   // The stock widget binds the Repeater straight to computeWorkspaceIds(),
   // which hands back a fresh array on every re-evaluation and makes the
