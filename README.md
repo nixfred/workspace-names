@@ -29,6 +29,24 @@ The widget takes its workspace list and occupancy from `hyprctl workspaces -j` (
 
 The slide-in pill that used to appear on every workspace switch is now **off by default** (it doubled the title). Bring it back with `{"_config": {"pill": true}}` in `~/.config/omarchy/workspace-names.json`.
 
+## Workspace Map (v0.4.0)
+
+Click the focused workspace title in the bar to open a live map of all
+visible and titled workspaces. Each row shows its number, title, window count,
+and the application classes currently present. Use `↑`/`↓` and Enter or click
+a row to switch; Esc closes the map. Right-click the title to rename the
+focused workspace directly.
+
+The map is also scriptable:
+
+```bash
+omarchy-shell nixfred.workspace-names.bar map
+```
+
+This borrows the useful overview idea from desk/session managers without
+moving, parking, relaunching, or owning any windows. Rift remains responsible
+for application recipes and Plonk remains responsible for renumbering.
+
 ## Install
 
 ```bash

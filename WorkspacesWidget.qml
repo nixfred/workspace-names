@@ -27,11 +27,30 @@ BarWidget {
   readonly property string namesPath: home + "/.config/omarchy/workspace-names.json"
   readonly property string renameTool: home + "/bin/workspace-name"
   property var names: ({})
+  property var liveApps: ({}) // workspace id -> sorted, de-duplicated app classes
+  property bool mapOpen: false
+  property int mapCursor: 0
+
+  // PopoutCoordinator calls owner.close() when another panel takes focus.
+  function close() { root.mapOpen = false }
+  function closeForPopoutSwitch() { root.close() }
 
   function nameFor(id) {
     if (!names) return ""
     var n = names[String(id)]
     return (n === undefined || n === null) ? "" : String(n).trim()
+  }
+
+  function appsFor(id) {
+    var apps = root.liveApps[String(id)]
+    return apps && apps.length ? apps : []
+  }
+
+  function appSummary(id) {
+    var apps = root.appsFor(id)
+    if (!apps.length) return root.liveWindows(id) > 0 ? root.liveWindows(id) + " windows" : "Empty"
+    var shown = apps.slice(0, 3).join(" · ")
+    return apps.length > 3 ? shown + "  +" + (apps.length - 3) : shown
   }
 
   FileView {
@@ -85,6 +104,7 @@ BarWidget {
     target: root.moduleName + ".bar"
     function edit(id: int): string { return root.openEditor(id) ? "ok" : "no such workspace button" }
     function editCurrent(): string { return root.editCurrentWorkspace() ? "ok" : "no focused workspace" }
+    function map(): string { root.openMap(); return "ok" }
     function ping(): string { return "ok" }
     function state(id: int): string {
       var b = root.buttons[String(id)]
@@ -128,8 +148,35 @@ BarWidget {
       }
     }
   }
+  Process {
+    id: clientsProbe
+    command: ["hyprctl", "clients", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var arr = JSON.parse(this.text || "[]")
+          var byWorkspace = {}
+          for (var i = 0; i < arr.length; i++) {
+            var client = arr[i] || {}
+            var id = client.workspace ? Number(client.workspace.id) : 0
+            if (id < 1 || id > 10) continue
+            var label = String(client.class || client.initialClass || "App").trim()
+            if (!label) label = "App"
+            var key = String(id)
+            if (!byWorkspace[key]) byWorkspace[key] = []
+            if (byWorkspace[key].indexOf(label) === -1) byWorkspace[key].push(label)
+          }
+          for (var key in byWorkspace) byWorkspace[key].sort()
+          root.liveApps = byWorkspace
+        } catch (e) {
+          console.warn("workspace-names: bad hyprctl clients output: " + e)
+        }
+      }
+    }
+  }
   Timer { id: probeDebounce; interval: 120; onTriggered: wsProbe.running = true }
-  function probe() { probeDebounce.restart() }
+  Timer { id: clientsDebounce; interval: 140; onTriggered: clientsProbe.running = true }
+  function probe() { probeDebounce.restart(); clientsDebounce.restart() }
   Component.onCompleted: probe()
   Connections {
     target: Hyprland
@@ -200,6 +247,25 @@ BarWidget {
     root.bar.run("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ workspace = \"" + id + "\" })"))
   }
 
+  function openMap() {
+    var list = root.workspaceIds()
+    var focused = root.focusedId
+    root.mapCursor = Math.max(0, list.indexOf(focused))
+    root.mapOpen = true
+  }
+  function closeMap() { root.mapOpen = false }
+  function moveMapCursor(delta) {
+    var count = root.workspaceIds().length
+    if (!count) return
+    root.mapCursor = (root.mapCursor + delta + count) % count
+  }
+  function activateMapCursor() {
+    var list = root.workspaceIds()
+    if (root.mapCursor < 0 || root.mapCursor >= list.length) return
+    root.closeMap()
+    root.focusWorkspace(list[root.mapCursor])
+  }
+
   readonly property real trailingGap: root.vertical ? 0 : Style.spaceReal(1.5)
 
   // ---- persistent title slot ----------------------------------------------
@@ -248,7 +314,118 @@ BarWidget {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.IBeamCursor
-      onClicked: if (root.focusedId > 0) root.openEditor(root.focusedId)
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: function(mouse) {
+        if (mouse.button === Qt.RightButton && root.focusedId > 0) root.openEditor(root.focusedId)
+        else root.openMap()
+      }
+    }
+
+    KeyboardPanel {
+      id: workspaceMap
+      anchorItem: titleSlot
+      bar: root.bar
+      owner: root
+      open: root.mapOpen && root.bar !== null
+      focusTarget: mapKeys
+      padding: Style.space(10)
+      contentWidth: Style.space(390)
+      contentHeight: workspaceMap.fittedContentHeight(mapColumn.implicitHeight)
+      onOpenChanged: if (!open && root.mapOpen) root.mapOpen = false
+
+      Item {
+        id: mapKeys
+        anchors.fill: parent
+        focus: true
+        Keys.onEscapePressed: root.closeMap()
+        Keys.onUpPressed: root.moveMapCursor(-1)
+        Keys.onDownPressed: root.moveMapCursor(1)
+        Keys.onReturnPressed: root.activateMapCursor()
+        Keys.onEnterPressed: root.activateMapCursor()
+
+        ColumnLayout {
+          id: mapColumn
+          anchors.left: parent.left
+          anchors.right: parent.right
+          spacing: Style.space(4)
+
+          Text {
+            text: "Workspace Map"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.title
+            font.bold: true
+            color: Color.popups.text
+          }
+          Text {
+            text: "↑↓ select · Enter switch · Esc close"
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            color: Util.alpha(Color.popups.text, 0.58)
+          }
+
+          Repeater {
+            model: root.workspaceIds()
+            Rectangle {
+              required property int modelData
+              required property int index
+              Layout.fillWidth: true
+              implicitHeight: Style.space(42)
+              radius: Math.max(4, Style.cornerRadius)
+              color: index === root.mapCursor ? Util.alpha(Color.accent, 0.18) : "transparent"
+              border.width: modelData === root.focusedId ? 1 : 0
+              border.color: Color.accent
+
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(8)
+                anchors.rightMargin: Style.space(8)
+                spacing: Style.space(10)
+                Text {
+                  text: String(modelData === 10 ? 0 : modelData)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                  color: Color.accent
+                  Layout.preferredWidth: Style.space(18)
+                }
+                ColumnLayout {
+                  Layout.fillWidth: true
+                  spacing: 0
+                  Text {
+                    Layout.fillWidth: true
+                    text: root.nameFor(modelData) || "Workspace " + modelData
+                    elide: Text.ElideRight
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
+                    font.bold: root.nameFor(modelData) !== ""
+                    color: Color.popups.text
+                  }
+                  Text {
+                    Layout.fillWidth: true
+                    text: root.appSummary(modelData)
+                    elide: Text.ElideRight
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.caption
+                    color: Util.alpha(Color.popups.text, 0.56)
+                  }
+                }
+                Text {
+                  text: root.liveWindows(modelData) > 0 ? String(root.liveWindows(modelData)) : ""
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  color: Util.alpha(Color.popups.text, 0.65)
+                }
+              }
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                onEntered: root.mapCursor = index
+                onClicked: { root.mapCursor = index; root.activateMapCursor() }
+              }
+            }
+          }
+        }
+      }
     }
   }
 
