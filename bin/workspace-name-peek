@@ -1,0 +1,46 @@
+#!/bin/bash
+# workspace-name-peek — hold SUPER alone to peek the workspace name pill.
+#
+# Bound in ~/.config/hypr/bindings.lua as a pair:
+#   press   Super_L -> workspace-name-peek down
+#   release Super_L -> workspace-name-peek up
+#
+# SUPER prefixes ~250 bindings, so a press must not show the pill on its own.
+# `down` waits DELAY first: a real combo (SUPER+Return) releases SUPER well
+# inside that window, which clears the state file and cancels the peek. Only a
+# SUPER held alone past DELAY reaches the display loop.
+#
+# The service auto-hides after its own `hold` (750ms by default), so the loop
+# re-issues `show` at REFRESH to keep the pill up for as long as the key is
+# down. `up` empties the state file, which stops the loop and hides at once.
+
+set -uo pipefail
+
+TARGET="nixfred.workspace-names"
+STATE="${XDG_RUNTIME_DIR:-/tmp}/workspace-name-peek.state"
+DELAY="${WORKSPACE_PEEK_DELAY:-0.3}"    # seconds held alone before showing
+REFRESH="${WORKSPACE_PEEK_REFRESH:-0.4}" # must stay under the service `hold`
+
+held() { [[ -s $STATE && $(< "$STATE") == "$1" ]]; }
+
+case "${1:-}" in
+  down)
+    # A fresh token supersedes any stale loop still running.
+    token="$$-${RANDOM}"
+    printf '%s' "$token" > "$STATE"
+    sleep "$DELAY"
+    held "$token" || exit 0
+    while held "$token"; do
+      omarchy-shell -q "$TARGET" show
+      sleep "$REFRESH"
+    done
+    ;;
+  up)
+    : > "$STATE"
+    omarchy-shell -q "$TARGET" hide
+    ;;
+  *)
+    echo "usage: workspace-name-peek down|up" >&2
+    exit 64
+    ;;
+esac
