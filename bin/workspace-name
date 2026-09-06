@@ -13,20 +13,25 @@
 #   workspace-name -l|--list     print all names
 #   workspace-name -p|--peek     just flash the overlay
 #   workspace-name -i N ...      act on workspace N instead of the focused one
+#   workspace-name -u|--if-unset NAME
+#                                set the name only if that workspace has none,
+#                                and flash nothing (the automatic naming path)
 set -euo pipefail
 
 FILE="${WORKSPACE_NAMES_FILE:-$HOME/.config/omarchy/workspace-names.json}"
 PLUGIN="nixfred.workspace-names"
 
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' >&2; }
 
 for c in hyprctl jq flock; do command -v "$c" >/dev/null || { echo "workspace-name: $c not found" >&2; exit 1; }; done
 
 ws=""
 mode="set"
+if_unset=0
 while (($#)); do
   case "$1" in
     -i|--id) ws="${2:-}"; shift 2 ;;
+    -u|--if-unset) if_unset=1; shift ;;
     -c|--clear) mode="clear"; shift ;;
     -l|--list) mode="list"; shift ;;
     -p|--peek) mode="peek"; shift ;;
@@ -95,6 +100,15 @@ else
 fi
 
 name="${name#"${name%%[![:space:]]*}"}"; name="${name%"${name##*[![:space:]]}"}"
+if ((if_unset)); then
+  # Automatic naming: claim the slot only if nothing holds it. The test and
+  # the write happen inside the same lock, so the first writer wins and a name
+  # you typed is never overwritten by a suggestion that was in flight. Silent:
+  # an automatic name must not flash the popup.
+  [[ -n $name ]] || exit 0
+  write 'if ((.[$id] | type) == "string" and (.[$id] | test("\\S"))) then . else .[$id] = $name end'
+  exit 0
+fi
 if [[ -z $name ]]; then
   write 'del(.[$id])'
 else

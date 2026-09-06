@@ -15,8 +15,15 @@ of Workspace Names itself; it does not require a second workspace widget.
 4. Clear the field and save to return to automatic naming. **Esc** or **Cancel**
    leaves the saved name alone.
 
-Manual names take precedence. Automatic suggestions use local window metadata,
-update as the contents change, and never write over your names.
+Manual names take precedence. Automatic suggestions use local window metadata
+and never write over a name you typed.
+
+**A workspace names itself.** Give a workspace its first window and, once the
+title settles (about a second), its suggestion is written to the names file as
+a real name — bold in the popup, carried by Plonk, yours to change. Renaming or
+clearing it is always the last word: clear a name and the next suggestion is
+accepted in its place. Set `"autoName": false` in `_config` to keep suggestions
+display-only.
 
 ## Popup
 
@@ -28,7 +35,7 @@ Names and popup settings live in `~/.config/omarchy/workspace-names.json`:
 
 ```json
 {
-  "_config": { "pill": true, "hold": 750, "slide": 80, "topOffset": 139 },
+  "_config": { "pill": true, "hold": 750, "slide": 80, "topOffset": 139, "autoName": true },
   "2": "Website redesign",
   "4": "Music"
 }
@@ -41,8 +48,11 @@ hide the popup. The file is watched for changes.
 
 ## Plonk and custom names
 
-- Occupied workspaces carry their manually saved names when Plonk renumbers
-  them. Automatic labels follow their windows without a stored ID mapping.
+- Occupied workspaces carry their saved names when Plonk renumbers them.
+- A name follows its windows. Move the last window off a named workspace
+  (**Super+Shift+*number***) and Plonk 1.2.0+ moves the name to wherever that
+  window landed, unless that workspace already has a name of its own. Closing
+  the window moves nothing.
 - Plonk reserves empty named slots by default. Its `empty_names=archive`
   option releases vanished slots while preserving their names in the names
   file's `_plonk_archived_names` array.
@@ -53,7 +63,9 @@ hide the popup. The file is watched for changes.
   backups under `~/.local/state/plonk/names-backups/`.
 
 Hyprland's actual workspace names remain numeric. The widget refreshes from
-`hyprctl` on renumber events, avoiding stale Quickshell workspace IDs.
+`hyprctl` on renumber events, avoiding stale Quickshell workspace IDs — for the
+focused workspace too, so the rail's highlight still lands on the right number
+after a workspace is created and renumbered underneath it.
 
 ## Install
 

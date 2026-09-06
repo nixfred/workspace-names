@@ -47,4 +47,23 @@ done
 bash "$root/bin/workspace-name" -i 3 -- 'My custom name'
 wait "$writer"
 jq -e '."3" == "My custom name" and ."8" == "Moved by Plonk"' "$WORKSPACE_NAMES_FILE" >/dev/null
+
+# --if-unset claims an empty slot, never overwrites one that is taken, and
+# never flashes the popup.
+printf '%s\n' '{}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --if-unset -i 4 -- 'Auto Brave'
+jq -e '."4" == "Auto Brave"' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" --if-unset -i 4 -- 'Auto Something Else'
+jq -e '."4" == "Auto Brave"' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" -i 4 -- 'Mine'
+bash "$root/bin/workspace-name" --if-unset -i 4 -- 'Auto Brave'
+jq -e '."4" == "Mine"' "$WORKSPACE_NAMES_FILE" >/dev/null
+# a blank suggestion writes nothing
+bash "$root/bin/workspace-name" --if-unset -i 5 -- '   '
+jq -e 'has("5") | not' "$WORKSPACE_NAMES_FILE" >/dev/null
+# a whitespace-only stored name is not a name: the suggestion may claim it
+printf '%s\n' '{"6":"  "}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --if-unset -i 6 -- 'Auto Files'
+jq -e '."6" == "Auto Files"' "$WORKSPACE_NAMES_FILE" >/dev/null
+
 echo 'Rename helper tests passed'

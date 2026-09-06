@@ -93,8 +93,7 @@ BarWidget {
     return true
   }
   function editCurrentWorkspace() {
-    var fw = Hyprland.focusedWorkspace
-    return fw ? openEditor(fw.id) : false
+    return root.focusedId > 0 ? openEditor(root.focusedId) : false
   }
 
   IpcHandler {
@@ -174,7 +173,25 @@ BarWidget {
       }
     }
   }
-  Timer { id: probeDebounce; interval: 120; onTriggered: wsProbe.running = true }
+  // Which workspace is focused, straight from the compositor. Quickshell's
+  // model answers that question from the same state that ghosts renumbered
+  // ids, so it is only a hint (see focusedId below).
+  Process {
+    id: focusProbe
+    command: ["hyprctl", "activeworkspace", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var id = Number(JSON.parse(this.text || "{}").id)
+          if (isFinite(id) && id > 0) root.probedFocusedId = id
+        } catch (e) {
+          console.warn("workspace-names: bad hyprctl activeworkspace output: " + e)
+        }
+        root.refreshIds()
+      }
+    }
+  }
+  Timer { id: probeDebounce; interval: 120; onTriggered: { wsProbe.running = true; focusProbe.running = true } }
   Timer { id: clientsDebounce; interval: 140; onTriggered: clientsProbe.running = true }
   function probe() { probeDebounce.restart(); clientsDebounce.restart() }
   Component.onCompleted: probe()
@@ -183,9 +200,14 @@ BarWidget {
     function onRawEvent(event) {
       var n = event && event.name ? String(event.name) : ""
       switch (n) {
-      case "changeworkspaceid": case "createworkspace": case "destroyworkspace":
-      case "moveworkspace": case "renameworkspace": case "openwindow": case "closewindow":
-      case "movewindow": case "monitorremoved": case "monitoradded":
+      case "changeworkspaceid": case "renameworkspace": case "moveworkspace":
+        // Quickshell does not apply these to its workspace model: without a
+        // refresh the focused workspace stays a ghost id that is on no button,
+        // and the focus capsule has nothing to sit on.
+        Hyprland.refreshWorkspaces()
+        root.probe(); break
+      case "createworkspace": case "destroyworkspace": case "openwindow":
+      case "closewindow": case "movewindow": case "monitorremoved": case "monitoradded":
         root.probe(); break
       case "windowtitle": case "windowtitlev2": case "activewindow":
         if (!clientsDebounce.running) clientsDebounce.start()
@@ -201,8 +223,7 @@ BarWidget {
   }
 
   function computeWorkspaceIds() {
-    var fw = Hyprland.focusedWorkspace
-    return WorkspaceIds.visible(root.live, Hyprland.workspaces.values, fw ? fw.id : 0)
+    return WorkspaceIds.visible(root.live, Hyprland.workspaces.values, root.focusedId)
   }
   onNamesChanged: refreshIds()
 
@@ -252,7 +273,19 @@ BarWidget {
   // The focused workspace's name always lives right after the numbers (bold
   // when named, dim "Name…" when not). Click it to rename inline. Hidden on a
   // vertical bar, where there is no room beside the column.
-  readonly property int focusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  // The model reacts to a focus change instantly, so it stays the primary
+  // source — but after a renumber (plonk's change_id) it can name a workspace
+  // that no longer exists. When it does, fall back to what hyprctl said: a
+  // focused id that is on no button leaves the rail with no highlight at all,
+  // which is exactly what a freshly created and renumbered workspace looked
+  // like.
+  property int probedFocusedId: -1
+  readonly property int modelFocusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  readonly property int focusedId: {
+    var id = root.modelFocusedId
+    if (id > 0 && (root.live === null || root.live[String(id)] !== undefined)) return id
+    return root.probedFocusedId > 0 ? root.probedFocusedId : id
+  }
   onFocusedIdChanged: refreshIds()
   readonly property int focusedIndex: root.ids.indexOf(root.focusedId)
   readonly property color railForeground: root.bar ? root.bar.barForeground : Color.foreground
@@ -480,7 +513,9 @@ BarWidget {
         readonly property var workspace: root.workspaceById(modelData)
         readonly property int liveWin: root.liveWindows(modelData)
         readonly property bool occupied: liveWin >= 0 ? liveWin > 0 : (workspace !== null && workspace.toplevels.values.length > 0)
-        readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
+        // root.focusedId, not the model directly: the number under the capsule
+        // and the capsule itself must never disagree.
+        readonly property bool focused: root.focusedId === modelData
         readonly property string wsName: root.nameFor(modelData)
         readonly property string displayName: root.labelFor(modelData)
         readonly property string suggestedName: root.suggestions[String(modelData)] || ""

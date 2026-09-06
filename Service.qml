@@ -12,6 +12,12 @@ import "Suggestions.js" as Suggestions
 // names take precedence over local window-title suggestions. The visible hold
 // starts after the short entrance fade; the popup never takes keyboard focus.
 //
+// A workspace that has windows but no name of its own ACCEPTS its suggestion:
+// the suggested title is written to the names file once, shortly after the
+// first window settles, and from then on it is an ordinary name that only you
+// change (or clear, which lets a fresh suggestion be accepted again). Turn it
+// off with "autoName": false in the file's _config.
+//
 // IPC (omarchy-shell nixfred.workspace-names <method>):
 //   show          peek the pill for the focused workspace
 //   showId <n>    peek the pill for workspace n
@@ -28,6 +34,7 @@ Item {
 
   readonly property string pluginId: "nixfred.workspace-names"
   readonly property string namesPath: Quickshell.env("HOME") + "/.config/omarchy/workspace-names.json"
+  readonly property string renameTool: decodeURIComponent(String(Qt.resolvedUrl("bin/workspace-name")).replace(/^file:\/\//, ""))
 
   // id -> name, straight from the JSON file. Keys starting with "_" are config.
   property var names: ({})
@@ -40,6 +47,8 @@ Item {
   readonly property int topOffset: cfg.topOffset !== undefined ? Number(cfg.topOffset) : 96
   // Disable explicitly with _config.pill = false.
   readonly property bool pillEnabled: cfg.pill !== false
+  // Disable automatic naming with _config.autoName = false.
+  readonly property bool autoNameEnabled: cfg.autoName !== false
 
   property bool opened: false
   property int currentId: -1
@@ -93,8 +102,67 @@ Item {
       label = labelFor(currentId)
     }
   }
-  onNamesChanged: updateLabel()
-  onSuggestionsChanged: updateLabel()
+  onNamesChanged: { updateLabel(); armAutoName() }
+  onSuggestionsChanged: { updateLabel(); armAutoName() }
+
+  // ---- accept the suggestion -------------------------------------------
+  // Suggestions are recomputed from window titles constantly, so the write is
+  // held back by a short settle (a browser tab that opens as "New Tab" has
+  // usually become something meaningful by then) and only ever fills an EMPTY
+  // slot. One write at a time: the helper takes Plonk's lock, and the last
+  // thing we want is a queue of them fighting over the same file.
+  property var autoPending: ({})
+
+  Timer {
+    id: autoSettle
+    interval: 1200
+    onTriggered: root.autoNameNext()
+  }
+
+  function armAutoName() {
+    if (!root.autoNameEnabled || autoNameProcess.running) return
+    if (autoNameCandidates().length && !autoSettle.running) autoSettle.start()
+  }
+
+  function autoNameCandidates() {
+    var out = []
+    for (var key in root.suggestions) {
+      if (!/^[1-9][0-9]*$/.test(key)) continue
+      if (root.autoPending[key]) continue
+      if (root.nameFor(key) !== "") continue
+      if (!String(root.suggestions[key] || "").trim()) continue
+      out.push(key)
+    }
+    return out.sort(function (a, b) { return Number(a) - Number(b) })
+  }
+
+  function autoNameNext() {
+    if (!root.autoNameEnabled || autoNameProcess.running) return
+    var list = autoNameCandidates()
+    if (!list.length) return
+    var id = list[0]
+    var pending = {}
+    for (var k in root.autoPending) pending[k] = root.autoPending[k]
+    pending[id] = true
+    root.autoPending = pending
+    autoNameProcess.pendingId = id
+    autoNameProcess.command = [root.renameTool, "--if-unset", "-i", id, "--",
+                               String(root.suggestions[id]).trim()]
+    autoNameProcess.running = true
+  }
+
+  Process {
+    id: autoNameProcess
+    property string pendingId: ""
+    onExited: {
+      var pending = {}
+      for (var k in root.autoPending) if (k !== autoNameProcess.pendingId) pending[k] = root.autoPending[k]
+      root.autoPending = pending
+      autoNameProcess.pendingId = ""
+      namesFile.reload()
+      root.armAutoName()
+    }
+  }
 
   Process {
     id: clientsProbe
@@ -144,6 +212,7 @@ Item {
     var fw = Hyprland.focusedWorkspace
     if (fw) root.lastId = fw.id
     clientsProbe.running = true
+    root.armAutoName()
   }
 
   Timer {
