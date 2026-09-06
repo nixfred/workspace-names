@@ -39,9 +39,9 @@ hide the popup. The file is watched for changes.
 
 - Occupied workspaces carry their manually saved names when Plonk renumbers
   them. Automatic labels follow their windows without a stored ID mapping.
-- With the custom-name protection update in Plonk, an empty slot with a saved
-  name is reserved. Incoming workspaces skip it, so its custom name survives.
-  Clear the name when that reserved slot is no longer useful.
+- Plonk reserves empty named slots by default. Its `empty_names=archive`
+  option releases vanished slots while preserving their names in the names
+  file's `_plonk_archived_names` array.
 - The rename helper shares Plonk's directory lock, so simultaneous saves and
   compaction do not overwrite each other's JSON updates. A busy or failed save
   leaves the editor open with an error.
@@ -105,3 +105,10 @@ editor fallback, quoting, and concurrent name writes using temporary state.
 ## License
 
 MIT — Fred Nix & Larry.
+# Workspace visibility
+
+The bar shows workspaces that currently exist, including an empty workspace
+you are using. It does not force buttons 1–5 or show a vanished workspace just
+because a saved title remains. Plonk can release vanished named slots with
+`empty_names=archive` in `~/.config/plonk/config`; archived titles remain in
+`_plonk_archived_names` in the workspace names file.

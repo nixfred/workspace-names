@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 import "Suggestions.js" as Suggestions
+import "WorkspaceIds.js" as WorkspaceIds
 
 // Workspace Names — bar widget (WorkspacesWidget.qml).
 //
@@ -103,6 +104,7 @@ BarWidget {
     function map(): string { root.openMap(); return "ok" }
     function ping(): string { return "ok" }
     function labels(): string { return JSON.stringify({ manual: root.names, suggested: root.suggestions }) }
+    function visibleIds(): string { return JSON.stringify(root.workspaceIds()) }
     function state(id: int): string {
       var b = root.buttons[String(id)]
       if (!b) return "no button"
@@ -199,31 +201,8 @@ BarWidget {
   }
 
   function computeWorkspaceIds() {
-    var ids = [1, 2, 3, 4, 5]
     var fw = Hyprland.focusedWorkspace
-    if (root.live) {
-      for (var k in root.live) {
-        var id = Number(k)
-        if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
-      }
-    } else {
-      var values = Hyprland.workspaces.values
-      for (var i = 0; i < values.length; i++) {
-        var vid = values[i].id
-        if (vid > 0 && vid <= 10 && ids.indexOf(vid) === -1) ids.push(vid)
-      }
-    }
-    if (fw && fw.id > 0 && fw.id <= 10 && ids.indexOf(fw.id) === -1) ids.push(fw.id)
-    // Titled slots are anchors (plonk never moves them): keep them visible
-    // even while empty so you can always jump back to "Browser" on 4.
-    if (root.names) {
-      for (var key in root.names) {
-        var tid = Number(key)
-        if (key.charAt(0) !== "_" && tid > 0 && tid <= 10 && ids.indexOf(tid) === -1) ids.push(tid)
-      }
-    }
-    ids.sort(function(left, right) { return left - right })
-    return ids
+    return WorkspaceIds.visible(root.live, Hyprland.workspaces.values, fw ? fw.id : 0)
   }
   onNamesChanged: refreshIds()
 
@@ -274,6 +253,7 @@ BarWidget {
   // when named, dim "Name…" when not). Click it to rename inline. Hidden on a
   // vertical bar, where there is no room beside the column.
   readonly property int focusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+  onFocusedIdChanged: refreshIds()
   readonly property string focusedName: focusedId > 0 ? root.labelFor(focusedId) : ""
   readonly property bool showTitle: false
   readonly property real titleMinWidth: Style.space(48)
