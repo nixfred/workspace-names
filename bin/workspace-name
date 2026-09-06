@@ -70,7 +70,14 @@ write() { # $1 = jq filter
     return 1
   fi
   local tmp; tmp=$(mktemp "${FILE}.XXXXXX")
-  jq --arg id "$ws" --arg name "${name:-}" "$1" "$FILE" > "$tmp" && mv "$tmp" "$FILE"
+  # `autolist` is the set of workspaces whose current name was written
+  # automatically from a window title. Plonk reads it to decide what may be
+  # overwritten: a name you TYPED outranks one a suggestion wrote, wherever the
+  # two meet. `tidy` drops the key again once it is empty.
+  jq --arg id "$ws" --arg name "${name:-}" \
+     'def autolist: (if (._auto | type) == "array" then ._auto else [] end);
+      def tidy: if (._auto | length) == 0 then del(._auto) else . end;
+      '"$1" "$FILE" > "$tmp" && mv "$tmp" "$FILE"
   local status=$?
   [[ ! -e $tmp ]] || rm -f "$tmp"
   exec 8>&-
@@ -78,7 +85,7 @@ write() { # $1 = jq filter
 }
 
 if [[ $mode == clear ]]; then
-  write 'del(.[$id])'
+  write 'del(.[$id]) | ._auto = (autolist - [$id]) | tidy'
   peek
   exit 0
 fi
@@ -106,12 +113,14 @@ if ((if_unset)); then
   # you typed is never overwritten by a suggestion that was in flight. Silent:
   # an automatic name must not flash the popup.
   [[ -n $name ]] || exit 0
-  write 'if ((.[$id] | type) == "string" and (.[$id] | test("\\S"))) then . else .[$id] = $name end'
+  write 'if ((.[$id] | type) == "string" and (.[$id] | test("\\S")))
+         then . else .[$id] = $name | ._auto = ((autolist + [$id]) | unique) end'
   exit 0
 fi
 if [[ -z $name ]]; then
-  write 'del(.[$id])'
+  write 'del(.[$id]) | ._auto = (autolist - [$id]) | tidy'
 else
-  write '.[$id] = $name'
+  # Typed by hand: the slot stops being automatic, so nothing overwrites it.
+  write '.[$id] = $name | ._auto = (autolist - [$id]) | tidy'
 fi
 peek

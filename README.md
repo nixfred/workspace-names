@@ -25,6 +25,12 @@ clearing it is always the last word: clear a name and the next suggestion is
 accepted in its place. Set `"autoName": false` in `_config` to keep suggestions
 display-only.
 
+Automatically written names are listed in the file's `_auto` array, and typing
+a name removes it from that list. That is how Plonk tells the two apart: a name
+you typed follows its windows through any move, displacing an automatic label
+that got there first, while an automatic label reserves no workspace number and
+is dropped rather than archived when its workspace goes away.
+
 ## Popup
 
 The bar contains numbers only. Switching workspaces shows the name centered
@@ -51,8 +57,9 @@ hide the popup. The file is watched for changes.
 - Occupied workspaces carry their saved names when Plonk renumbers them.
 - A name follows its windows. Move the last window off a named workspace
   (**Super+Shift+*number***) and Plonk 1.2.0+ moves the name to wherever that
-  window landed, unless that workspace already has a name of its own. Closing
-  the window moves nothing.
+  window landed. A name you typed wins over an automatic one at the
+  destination; two typed names never overwrite each other. Closing the window
+  moves nothing.
 - Plonk reserves empty named slots by default. Its `empty_names=archive`
   option releases vanished slots while preserving their names in the names
   file's `_plonk_archived_names` array.

@@ -66,4 +66,20 @@ printf '%s\n' '{"6":"  "}' > "$WORKSPACE_NAMES_FILE"
 bash "$root/bin/workspace-name" --if-unset -i 6 -- 'Auto Files'
 jq -e '."6" == "Auto Files"' "$WORKSPACE_NAMES_FILE" >/dev/null
 
+# An automatic name is marked as such; typing one clears the mark, so Plonk can
+# tell a suggestion it may overwrite from a name the user chose.
+printf '%s\n' '{}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --if-unset -i 7 -- 'Auto Chat'
+jq -e '._auto == ["7"]' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" -i 7 -- 'Mine'
+jq -e 'has("_auto") | not' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" --if-unset -i 8 -- 'Auto Code'
+jq -e '._auto == ["8"]' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" -i 8 --clear
+jq -e '(has("_auto") | not) and (has("8") | not)' "$WORKSPACE_NAMES_FILE" >/dev/null
+# a damaged _auto is replaced, never propagated
+printf '%s\n' '{"9":"x","_auto":"nonsense"}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --if-unset -i 3 -- 'Auto Pi'
+jq -e '._auto == ["3"] and ."9" == "x"' "$WORKSPACE_NAMES_FILE" >/dev/null
+
 echo 'Rename helper tests passed'
