@@ -10,8 +10,8 @@ import "WorkspaceIds.js" as WorkspaceIds
 
 // Workspace Names — bar widget (WorkspacesWidget.qml).
 //
-// A drop-in for the stock `omarchy.workspaces` widget: the numbers render
-// exactly the same way (same WidgetButton, same glyph, same sizing), plus:
+// Rounded rail and sliding focus capsule adapted from pi.workspaces.
+// Keep the numbered buttons and Workspace Names interactions together:
 //   hover a number   → a small chip slides out under it with the workspace's
 //                      current name (or "Name…" when unnamed); it stays while
 //                      the pointer is on the number or the chip
@@ -112,7 +112,7 @@ BarWidget {
     }
   }
 
-  // ---- stock workspace row (kept byte-for-byte in behaviour) --------------
+  // ---- workspace state --------------------------------------------------
 
   function workspaceById(id) {
     var values = Hyprland.workspaces.values
@@ -254,6 +254,21 @@ BarWidget {
   // vertical bar, where there is no room beside the column.
   readonly property int focusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
   onFocusedIdChanged: refreshIds()
+  readonly property int focusedIndex: root.ids.indexOf(root.focusedId)
+  readonly property color railForeground: root.bar ? root.bar.barForeground : Color.foreground
+  readonly property color capsuleText: root.bar ? root.bar.themeContrastForeground : Color.background
+  readonly property real slotExtent: Style.spaceReal(24)
+  readonly property real capsuleThickness: Style.spaceReal(22)
+  readonly property real targetStart: Math.max(0, root.focusedIndex) * root.slotExtent
+  property real animatedStart: targetStart
+  property real animatedEnd: targetStart + slotExtent
+
+  Behavior on animatedStart {
+    NumberAnimation { duration: 300; easing.type: Easing.OutQuint }
+  }
+  Behavior on animatedEnd {
+    NumberAnimation { duration: 380; easing.type: Easing.OutQuint }
+  }
   readonly property string focusedName: focusedId > 0 ? root.labelFor(focusedId) : ""
   readonly property bool showTitle: false
   readonly property real titleMinWidth: Style.space(48)
@@ -417,6 +432,34 @@ BarWidget {
     }
   }
 
+  // The rail and capsule sit behind the existing clickable/editor buttons.
+  // Geometry follows the same slot width in horizontal and vertical bars.
+  Item {
+    anchors.fill: grid
+    Rectangle {
+      x: root.vertical ? (parent.width - width) / 2 : Style.spaceReal(2)
+      y: root.vertical ? Style.spaceReal(2) : (parent.height - height) / 2
+      width: root.vertical ? root.capsuleThickness : Math.max(0, parent.width - Style.spaceReal(4))
+      height: root.vertical ? Math.max(0, parent.height - Style.spaceReal(4)) : root.capsuleThickness
+      radius: Math.min(width, height) / 2
+      color: Util.alpha(root.railForeground, 0.055)
+      border.width: Style.space(1)
+      border.color: Util.alpha(root.railForeground, 0.1)
+    }
+    Rectangle {
+      visible: root.focusedIndex >= 0
+      x: root.vertical ? (parent.width - width) / 2 : root.animatedStart
+      y: root.vertical ? root.animatedStart : (parent.height - height) / 2
+      width: root.vertical ? root.capsuleThickness : Math.max(1, root.animatedEnd - root.animatedStart)
+      height: root.vertical ? Math.max(1, root.animatedEnd - root.animatedStart) : root.capsuleThickness
+      radius: Math.min(width, height) / 2
+      color: Color.accent
+      border.width: Style.space(1)
+      border.color: Util.alpha(root.railForeground, 0.52)
+      Behavior on color { ColorAnimation { duration: 180 } }
+    }
+  }
+
   GridLayout {
     id: grid
     anchors.left: parent.left
@@ -424,8 +467,8 @@ BarWidget {
     anchors.bottom: parent.bottom
     width: implicitWidth
     columns: root.vertical ? 1 : root.workspaceIds().length
-    columnSpacing: root.vertical ? 0 : Style.space(1)
-    rowSpacing: root.vertical ? Style.space(2) : 0
+    columnSpacing: 0
+    rowSpacing: 0
 
     Repeater {
       model: root.workspaceIds()
@@ -466,12 +509,35 @@ BarWidget {
         }
 
         bar: root.bar
-        text: focused ? "󱓻" : (modelData === 10 ? "0" : String(modelData))
-        opacity: occupied || focused ? 1 : 0.5
+        text: modelData === 10 ? "0" : String(modelData)
+        labelVisible: false
+        opacity: 1
         horizontalMargin: 6
         verticalPadding: 6
-        fixedWidth: root.vertical ? root.barSize : Style.space(20)
-        fixedHeight: root.barSize
+        fixedWidth: root.vertical ? root.barSize : root.slotExtent
+        fixedHeight: root.vertical ? root.slotExtent : root.barSize
+        Rectangle {
+          anchors.centerIn: parent
+          width: Style.space(21)
+          height: width
+          radius: width / 2
+          color: button.tooltipHovered && !button.focused
+            ? Util.alpha(root.railForeground, 0.11) : "transparent"
+          Behavior on color { ColorAnimation { duration: 130 } }
+        }
+        Text {
+          anchors.centerIn: parent
+          text: button.text
+          textFormat: Text.PlainText
+          color: button.focused ? root.capsuleText : root.railForeground
+          opacity: button.focused ? 1 : (button.occupied ? 0.9 : 0.45)
+          font.family: button.fontFamily
+          font.pixelSize: button.focused ? Style.font.subtitle : Style.font.body
+          font.bold: button.focused
+          Behavior on color { ColorAnimation { duration: 160 } }
+          Behavior on opacity { NumberAnimation { duration: 160 } }
+          Behavior on font.pixelSize { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+        }
         onPressed: function(mouseButton) {
           if (mouseButton === Qt.RightButton) button.beginEdit()
           else root.focusWorkspace(modelData)

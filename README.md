@@ -3,6 +3,10 @@
 An Omarchy plugin that keeps workspace numbers in the bar and flashes the
 current workspace name in a centered popup. Names can be automatic or yours.
 
+The numbers share a rounded rail with an animated accent capsule around the
+active number, adapted from the Kinetic Workspace Strip. This styling is part
+of Workspace Names itself; it does not require a second workspace widget.
+
 ## Everyday workflow
 
 1. Switch to the workspace and press **Super+Shift+R**, or right-click its number.
