@@ -20,7 +20,7 @@ PLUGIN="nixfred.workspace-names"
 
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' >&2; }
 
-for c in hyprctl jq; do command -v "$c" >/dev/null || { echo "workspace-name: $c not found" >&2; exit 1; }; done
+for c in hyprctl jq flock; do command -v "$c" >/dev/null || { echo "workspace-name: $c not found" >&2; exit 1; }; done
 
 ws=""
 mode="set"
@@ -53,8 +53,23 @@ peek() { omarchy-shell -q "$PLUGIN" showId "$ws" || true; }
 if [[ $mode == peek ]]; then peek; exit 0; fi
 
 write() { # $1 = jq filter
+  # Share Plonk's directory lock, then read the latest JSON. Atomic rename
+  # alone doesn't protect against losing another writer's concurrent update.
+  local state_dir="${PLONK_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/plonk}"
+  [[ ! -L $state_dir ]] || { echo 'workspace-name: refusing a symlinked Plonk state directory' >&2; return 1; }
+  mkdir -p -m 700 "$state_dir"
+  exec 8<"$state_dir"
+  if ! flock -w 3 8; then
+    exec 8>&-
+    echo 'workspace-name: Plonk is busy; try saving again' >&2
+    return 1
+  fi
   local tmp; tmp=$(mktemp "${FILE}.XXXXXX")
   jq --arg id "$ws" --arg name "${name:-}" "$1" "$FILE" > "$tmp" && mv "$tmp" "$FILE"
+  local status=$?
+  [[ ! -e $tmp ]] || rm -f "$tmp"
+  exec 8>&-
+  return "$status"
 }
 
 if [[ $mode == clear ]]; then
@@ -68,7 +83,7 @@ if (($#)); then
 else
   # Preferred: the bar widget's inline editor (hover the number → click the
   # chip does the same). Returns "ok" only when the widget is live in the bar.
-  if [[ $(omarchy-shell -q "$PLUGIN.bar" edit "$ws" 2>/dev/null) == ok ]]; then
+  if [[ $(omarchy-shell "$PLUGIN.bar" edit "$ws" 2>/dev/null) == ok ]]; then
     exit 0
   fi
   current=$(jq -r --arg id "$ws" '.[$id] // ""' "$FILE")

@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
+import "Suggestions.js" as Suggestions
 
 // Workspace Names — bar widget (WorkspacesWidget.qml).
 //
@@ -25,8 +26,9 @@ BarWidget {
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string namesPath: home + "/.config/omarchy/workspace-names.json"
-  readonly property string renameTool: home + "/bin/workspace-name"
+  readonly property string renameTool: decodeURIComponent(String(Qt.resolvedUrl("bin/workspace-name")).replace(/^file:\/\//, ""))
   property var names: ({})
+  property var suggestions: ({})
   property var liveApps: ({}) // workspace id -> sorted, de-duplicated app classes
   property bool mapOpen: false
   property int mapCursor: 0
@@ -40,6 +42,8 @@ BarWidget {
     var n = names[String(id)]
     return (n === undefined || n === null) ? "" : String(n).trim()
   }
+
+  function labelFor(id) { return Suggestions.label(root.names, root.suggestions, id) }
 
   function appsFor(id) {
     var apps = root.liveApps[String(id)]
@@ -72,14 +76,6 @@ BarWidget {
     }
   }
 
-  function saveName(id, name) {
-    if (!root.bar) return
-    var trimmed = String(name || "").trim()
-    var cmd = Util.shellQuote(root.renameTool) + " -i " + id
-    cmd += trimmed === "" ? " --clear" : " " + Util.shellQuote(trimmed)
-    root.bar.run(cmd)
-  }
-
   // ---- IPC: omarchy-shell nixfred.workspace-names.bar <method> -------------
   // edit(n) / editCurrent() open the inline editor under workspace n (the
   // focused one for editCurrent) — this is what SUPER+SHIFT+R drives.
@@ -106,6 +102,7 @@ BarWidget {
     function editCurrent(): string { return root.editCurrentWorkspace() ? "ok" : "no focused workspace" }
     function map(): string { root.openMap(); return "ok" }
     function ping(): string { return "ok" }
+    function labels(): string { return JSON.stringify({ manual: root.names, suggested: root.suggestions }) }
     function state(id: int): string {
       var b = root.buttons[String(id)]
       if (!b) return "no button"
@@ -168,6 +165,7 @@ BarWidget {
           }
           for (var key in byWorkspace) byWorkspace[key].sort()
           root.liveApps = byWorkspace
+          root.suggestions = Suggestions.fromClients(arr)
         } catch (e) {
           console.warn("workspace-names: bad hyprctl clients output: " + e)
         }
@@ -187,6 +185,9 @@ BarWidget {
       case "moveworkspace": case "renameworkspace": case "openwindow": case "closewindow":
       case "movewindow": case "monitorremoved": case "monitoradded":
         root.probe(); break
+      case "windowtitle": case "windowtitlev2": case "activewindow":
+        if (!clientsDebounce.running) clientsDebounce.start()
+        break
       }
     }
   }
@@ -273,8 +274,8 @@ BarWidget {
   // when named, dim "Name…" when not). Click it to rename inline. Hidden on a
   // vertical bar, where there is no room beside the column.
   readonly property int focusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
-  readonly property string focusedName: focusedId > 0 ? root.nameFor(focusedId) : ""
-  readonly property bool showTitle: !root.vertical
+  readonly property string focusedName: focusedId > 0 ? root.labelFor(focusedId) : ""
+  readonly property bool showTitle: false
   readonly property real titleMinWidth: Style.space(48)
   readonly property real titleMaxWidth: Style.space(180)
   readonly property real titleGap: Style.space(6)
@@ -316,8 +317,8 @@ BarWidget {
       cursorShape: Qt.IBeamCursor
       acceptedButtons: Qt.LeftButton | Qt.RightButton
       onClicked: function(mouse) {
-        if (mouse.button === Qt.RightButton && root.focusedId > 0) root.openEditor(root.focusedId)
-        else root.openMap()
+        if (mouse.button === Qt.RightButton) root.openMap()
+        else if (root.focusedId > 0) root.openEditor(root.focusedId)
       }
     }
 
@@ -357,7 +358,7 @@ BarWidget {
             color: Color.popups.text
           }
           Text {
-            text: "↑↓ select · Enter switch · Esc close"
+            text: "↑↓ select · Enter switch · Right-click rename · Esc close"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
             color: Util.alpha(Color.popups.text, 0.58)
@@ -393,7 +394,7 @@ BarWidget {
                   spacing: 0
                   Text {
                     Layout.fillWidth: true
-                    text: root.nameFor(modelData) || "Workspace " + modelData
+                    text: root.labelFor(modelData) || "Workspace " + modelData
                     elide: Text.ElideRight
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
@@ -419,8 +420,15 @@ BarWidget {
               MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onEntered: root.mapCursor = index
-                onClicked: { root.mapCursor = index; root.activateMapCursor() }
+                onClicked: function(mouse) {
+                  if (mouse.button === Qt.RightButton) {
+                    var id = modelData
+                    root.closeMap()
+                    Qt.callLater(function() { root.openEditor(id) })
+                  } else { root.mapCursor = index; root.activateMapCursor() }
+                }
               }
             }
           }
@@ -451,12 +459,15 @@ BarWidget {
         readonly property bool occupied: liveWin >= 0 ? liveWin > 0 : (workspace !== null && workspace.toplevels.values.length > 0)
         readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
         readonly property string wsName: root.nameFor(modelData)
+        readonly property string displayName: root.labelFor(modelData)
+        readonly property string suggestedName: root.suggestions[String(modelData)] || ""
         readonly property bool named: wsName !== ""
 
         property bool chipOpen: false
         property bool editing: false
+        property string saveError: ""
         Component.onCompleted: root.registerButton(modelData, button)
-        Component.onDestruction: root.unregisterButton(modelData, button)
+        Component.onDestruction: if (root) root.unregisterButton(modelData, button)
 
         // KeyboardPanel.close() / PopupCard.close() and the bar's popout
         // coordinator call `owner.close()` when one exists — and assign
@@ -467,6 +478,7 @@ BarWidget {
         function debugState() {
           return {
             id: modelData, chipOpen: chipOpen, editing: editing, hovered: tooltipHovered,
+            draft: editField.text, saved: wsName, suggested: suggestedName, saveError: saveError,
             chip: { open: chip.open, visible: chip.visible, containsMouse: chip.containsMouse },
             editor: { open: editor.open, visible: editor.visible, primed: editor.focusPrimed, switching: editor.popoutSwitching },
             activePopout: root.bar && root.bar.activePopout ? (root.bar.activePopout.modelData !== undefined ? "button" + root.bar.activePopout.modelData : "other") : "none"
@@ -519,7 +531,7 @@ BarWidget {
             Text {
               id: chipLabel
               anchors.centerIn: parent
-              text: button.named ? button.wsName : "Name…"
+              text: button.displayName || "Name…"
               font.family: Style.font.family
               font.pixelSize: Style.font.body
               font.bold: button.named
@@ -537,17 +549,32 @@ BarWidget {
         // ---- inline editor ----------------------------------------------
         function beginEdit() {
           button.chipOpen = false
-          editField.text = button.wsName
+          button.saveError = ""
+          editField.text = button.wsName || button.suggestedName
           button.editing = true
           editField.selectAll()
         }
         function commitEdit() {
-          if (!button.editing) return
-          var v = editField.text
-          button.editing = false
-          if (String(v).trim() !== button.wsName) root.saveName(modelData, v)
+          if (!button.editing || saveProcess.running) return
+          var v = String(editField.text).trim()
+          button.saveError = ""
+          saveProcess.command = v === ""
+            ? [root.renameTool, "-i", String(modelData), "--clear"]
+            : [root.renameTool, "-i", String(modelData), "--", v]
+          saveProcess.running = true
         }
         function cancelEdit() { button.editing = false }
+
+        Process {
+          id: saveProcess
+          stderr: StdioCollector { }
+          onExited: function(exitCode, exitStatus) {
+            if (exitCode === 0) {
+              namesFile.reload()
+              button.editing = false
+            } else button.saveError = "Couldn't save. Try again."
+          }
+        }
 
         KeyboardPanel {
           id: editor
@@ -557,19 +584,19 @@ BarWidget {
           open: button.editing && root.bar !== null
           focusTarget: editField
           padding: Style.space(8)
-          contentWidth: Style.space(230)
-          contentHeight: editor.fittedContentHeight(editRow.implicitHeight)
+          contentWidth: Style.space(350)
+          contentHeight: editor.fittedContentHeight(editColumn.implicitHeight)
           // Belt and braces: if anything else ever forces the panel shut,
           // fall back to a consistent closed state instead of a stuck one.
           onOpenChanged: if (!open && button.editing) button.editing = false
 
-          RowLayout {
-            id: editRow
+          ColumnLayout {
+            id: editColumn
             anchors.fill: parent
             spacing: Style.space(8)
 
             Text {
-              text: String(button.modelData === 10 ? 0 : button.modelData)
+              text: "Name workspace " + button.modelData
               font.family: Style.font.family
               font.pixelSize: Style.font.title
               font.bold: true
@@ -584,6 +611,30 @@ BarWidget {
               verticalPadding: Style.space(4)
               onAccepted: button.commitEdit()
               Keys.onEscapePressed: button.cancelEdit()
+            }
+            Text {
+              Layout.fillWidth: true
+              text: button.saveError || "Empty name uses an automatic label from window titles."
+              wrapMode: Text.WordWrap
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              color: button.saveError ? Color.accent : Util.alpha(Color.popups.text, 0.65)
+            }
+            RowLayout {
+              Layout.fillWidth: true
+              Button {
+                text: "Suggest"
+                enabled: button.suggestedName !== "" && !saveProcess.running
+                onClicked: { editField.text = button.suggestedName; editField.forceActiveFocus(); editField.selectAll() }
+              }
+              Item { Layout.fillWidth: true }
+              Button { text: "Cancel"; onClicked: button.cancelEdit() }
+              Button {
+                text: saveProcess.running ? "Saving…" : "Save"
+                enabled: !saveProcess.running
+                bordered: true
+                onClicked: button.commitEdit()
+              }
             }
           }
         }

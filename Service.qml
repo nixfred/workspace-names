@@ -4,18 +4,13 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
+import "Suggestions.js" as Suggestions
 
 // Workspace Names — service plugin.
 //
-// Since v0.3.0 the bar widget shows the focused workspace's name permanently
-// right after the numbers, so the slide-in pill below is OFF by default (it
-// would double-display the name). Opt back in with
-//   {"_config": {"pill": true}} in ~/.config/omarchy/workspace-names.json.
-// When enabled: on every switch a small pill slides in under the workspace
-// widget showing "<id>  <name>" (or "Workspace <id>" when unnamed), holds
-// briefly, then slides out the other way. Names come from the JSON file
-// ({"3": "Code", ...}) which is watched, so `workspace-name` edits show up
-// instantly.
+// A centered, non-interactive title flashes on workspace changes. Manual
+// names take precedence over local window-title suggestions. The visible hold
+// starts after the short entrance fade; the popup never takes keyboard focus.
 //
 // IPC (omarchy-shell nixfred.workspace-names <method>):
 //   show          peek the pill for the focused workspace
@@ -36,17 +31,15 @@ Item {
 
   // id -> name, straight from the JSON file. Keys starting with "_" are config.
   property var names: ({})
+  property var suggestions: ({})
 
-  // Tunables. Override via "_config": {"hold": 900, "slide": 160, "travel": 48,
-  // "offsetX": 52, "offsetY": 6} in the names file.
+  // hold: fully visible milliseconds; slide: fade milliseconds; topOffset: pixels.
   readonly property var cfg: (names && typeof names._config === "object" && names._config) ? names._config : ({})
-  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 900
-  readonly property int slideMs: Number(cfg.slide) > 0 ? Number(cfg.slide) : 160
-  readonly property int travel: Number(cfg.travel) > 0 ? Number(cfg.travel) : 48
-  readonly property int offsetX: cfg.offsetX !== undefined ? Number(cfg.offsetX) : 52
-  readonly property int offsetY: cfg.offsetY !== undefined ? Number(cfg.offsetY) : 6
-  // The pill is opt-in now that the bar widget shows the title permanently.
-  readonly property bool pillEnabled: cfg.pill === true
+  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 750
+  readonly property int slideMs: Number(cfg.slide) > 0 ? Number(cfg.slide) : 80
+  readonly property int topOffset: cfg.topOffset !== undefined ? Number(cfg.topOffset) : 96
+  // Disable explicitly with _config.pill = false.
+  readonly property bool pillEnabled: cfg.pill !== false
 
   property bool opened: false
   property int currentId: -1
@@ -67,7 +60,7 @@ Item {
   }
 
   function labelFor(id) {
-    var n = nameFor(id)
+    var n = Suggestions.label(root.names, root.suggestions, id)
     return n !== "" ? n : "Workspace " + id
   }
 
@@ -79,10 +72,11 @@ Item {
     }
     if (id < 1) return
     currentId = id
-    named = nameFor(id) !== ""
+    named = Suggestions.label(root.names, root.suggestions, id) !== ""
     label = labelFor(id)
     opened = true
-    hideTimer.restart()
+    hideTimer.stop()
+    if (!clientsProbe.running) clientsProbe.running = true
     presented()
   }
 
@@ -93,11 +87,29 @@ Item {
     dismissed()
   }
 
-  onNamesChanged: {
+  function updateLabel() {
     if (currentId > 0) {
-      named = nameFor(currentId) !== ""
+      named = Suggestions.label(root.names, root.suggestions, currentId) !== ""
       label = labelFor(currentId)
     }
+  }
+  onNamesChanged: updateLabel()
+  onSuggestionsChanged: updateLabel()
+
+  Process {
+    id: clientsProbe
+    command: ["hyprctl", "clients", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.suggestions = Suggestions.fromClients(JSON.parse(this.text || "[]")) }
+        catch (e) { console.warn("workspace-names: cannot read popup suggestions: " + e) }
+      }
+    }
+  }
+  Timer {
+    id: probeDebounce
+    interval: 120
+    onTriggered: if (!clientsProbe.running) clientsProbe.running = true
   }
 
   // Hyprland's change_id (plonk renumbering) emits "changeworkspaceid>>old,new"
@@ -110,6 +122,7 @@ Item {
       if (n === "changeworkspaceid" || n === "renameworkspace" || n === "moveworkspace") {
         root.resync()
       }
+      if (/workspace|window/.test(n) && !probeDebounce.running) probeDebounce.start()
     }
   }
 
@@ -121,7 +134,7 @@ Item {
       var id = fw.id
       if (id < 1) return  // special / scratchpad workspaces: leave alone
       if (root.lastId > 0 && id !== root.lastId) root.direction = id > root.lastId ? 1 : -1
-      if (id === root.lastId && root.opened) return
+      if (id === root.lastId) return
       root.lastId = id
       root.show(id)
     }
@@ -130,6 +143,7 @@ Item {
   Component.onCompleted: {
     var fw = Hyprland.focusedWorkspace
     if (fw) root.lastId = fw.id
+    clientsProbe.running = true
   }
 
   Timer {
@@ -177,6 +191,7 @@ Item {
     function name(id: int): string { return root.nameFor(id) }
     function reload(): string { namesFile.reload(); return "ok" }
     function ping(): string { return "ok" }
+    function state(): string { return JSON.stringify({ opened: root.opened, id: root.currentId, label: root.label, holdMs: root.holdMs, topOffset: root.topOffset, fadeMs: root.slideMs }) }
   }
 
   Variants {
@@ -219,7 +234,7 @@ Item {
         exitAnim.stop()
         enterAnim.stop()
         win.shown = true
-        pill.shift = root.direction * root.travel
+        pill.shift = 0
         pill.opacity = 0
         enterAnim.start()
       }
@@ -233,11 +248,12 @@ Item {
         id: enterAnim
         NumberAnimation { target: pill; property: "shift"; to: 0; duration: root.slideMs; easing.type: Easing.OutCubic }
         NumberAnimation { target: pill; property: "opacity"; to: 1; duration: root.slideMs; easing.type: Easing.OutQuad }
+        onFinished: if (root.opened && win.onThisScreen) hideTimer.restart()
       }
 
       ParallelAnimation {
         id: exitAnim
-        NumberAnimation { target: pill; property: "shift"; to: -root.direction * root.travel; duration: root.slideMs; easing.type: Easing.InCubic }
+        NumberAnimation { target: pill; property: "shift"; to: 0; duration: root.slideMs; easing.type: Easing.InCubic }
         NumberAnimation { target: pill; property: "opacity"; to: 0; duration: root.slideMs; easing.type: Easing.InQuad }
         onFinished: if (!root.opened) win.shown = false
       }
@@ -246,9 +262,9 @@ Item {
         id: pill
         property real shift: 0
 
-        // Tucked just under the bar, roughly beneath the workspace numbers.
-        x: Style.gapsOut + root.offsetX + shift
-        y: Style.bar.sizeHorizontal + Style.gapsOut + root.offsetY
+        // Centered on the focused output, below the physical top edge.
+        x: Math.round((win.width - width) / 2)
+        y: root.topOffset
         width: row.implicitWidth + pad * 2
         height: Math.round(Style.font.title * 2.2)
         radius: Math.max(Style.cornerRadius, 4)
@@ -281,6 +297,7 @@ Item {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             text: root.label
+            textFormat: Text.PlainText
             font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: root.named

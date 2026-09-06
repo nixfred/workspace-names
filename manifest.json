@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nixfred.workspace-names",
   "name": "Workspace Names",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "author": "Fred Nix & Larry",
   "license": "MIT",
   "description": "Give Hyprland workspaces a title without touching their numbers. Includes inline rename and a live Workspace Map with occupancy and app identities. Names live in ~/.config/omarchy/workspace-names.json.",
@@ -17,7 +17,7 @@
   "homepage": "https://github.com/nixfred/workspace-names",
   "barWidget": {
     "displayName": "Workspace Names",
-    "description": "The stock workspace numbers, plus the focused workspace's name pinned right after them (click to rename), hover a number to see its name, and an inline editor. Replaces omarchy.workspaces in the bar layout.",
+    "description": "Workspace numbers with inline renaming; names flash in a centered screen popup.",
     "category": "System",
     "aliases": [
       "workspaces",
