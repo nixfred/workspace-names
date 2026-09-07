@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# workspace-cycle — SUPER+LEFT / SUPER+RIGHT that never skip a named workspace.
+#
+# Hyprland's e+1/e-1 walk only the workspaces that EXIST, and an empty
+# workspace does not exist. So a titled-but-empty slot (5, say) was silently
+# jumped over and the number felt like it had vanished: 4 -> 6 with nothing in
+# between. The cycle set here is the union of the numeric workspaces that
+# currently exist and the slots carrying a name in workspace-names.json, so a
+# named workspace stays reachable while it is empty. Unnamed empty slots are
+# still never visited, and the list wraps at both ends.
+#
+#   workspace-cycle next   (SUPER+RIGHT)
+#   workspace-cycle prev   (SUPER+LEFT)
+#
+# Named slots have no monitor of their own, so on a multi-head setup they join
+# the cycle on whichever monitor is focused. Existing workspaces are filtered
+# to the focused monitor as before.
+
+set -uo pipefail
+
+dir=${1:-next}
+case $dir in
+  next|prev) ;;
+  *) echo "usage: workspace-cycle next|prev" >&2; exit 2 ;;
+esac
+
+if [[ -n ${XDG_CONFIG_HOME:-} ]]; then
+  NAMES=${WORKSPACE_NAMES_FILE:-$XDG_CONFIG_HOME/omarchy/workspace-names.json}
+else
+  NAMES=${WORKSPACE_NAMES_FILE:-$HOME/.config/omarchy/workspace-names.json}
+fi
+
+ws=$(hyprctl -j workspaces 2>/dev/null) || exit 0
+active=$(hyprctl -j activeworkspace 2>/dev/null | jq -r '.id') || exit 0
+[[ $active =~ ^[0-9]+$ ]] || exit 0
+mon=$(jq -r --argjson a "$active" '[.[] | select(.id == $a) | .monitor] | first // ""' <<<"$ws")
+
+# Named slots: keys like "5" holding a non-blank string. The metadata keys
+# (_auto, _config, _plonk_archived_names) all fail the numeric test. Same
+# hardening as plonk: a regular file only, never a symlink.
+named='[]'
+if [[ -f $NAMES && ! -L $NAMES ]]; then
+  named=$(jq -c '[to_entries[]
+                  | select(.key | test("^[1-9][0-9]*$"))
+                  | select(.value | type == "string" and test("\\S"))
+                  | (.key | tonumber)]' "$NAMES" 2>/dev/null) || named='[]'
+  [[ -n $named ]] || named='[]'
+fi
+
+# The active workspace is always in the set, so there is somewhere to step from
+# even when it is an unnamed empty one.
+target=$(jq -r --argjson named "$named" --argjson a "$active" --arg m "$mon" --arg d "$dir" '
+  ([ .[]
+     | select(.id > 0)
+     | select(($m == "") or (.monitor == $m))
+     | select((.name // "") | test("^[0-9]+$"))
+     | .id ] + $named + [$a] | unique) as $c
+  | if ($c | length) < 2 then empty
+    else
+      ($c | index($a)) as $i
+      | ($c | length) as $n
+      | if $d == "next" then $c[($i + 1) % $n] else $c[($i - 1 + $n) % $n] end
+    end' <<<"$ws" 2>/dev/null)
+
+[[ -n $target && $target != null ]] || exit 0
+
+hyprctl dispatch "hl.dsp.focus({ workspace = \"$target\" })" >/dev/null 2>&1 \
+  || hyprctl dispatch workspace "$target" >/dev/null 2>&1

@@ -82,12 +82,32 @@ omarchy plugin add https://github.com/nixfred/workspace-names.git --enable
 
 Replace the existing workspace widget entry in `bar.layout.left` in
 `~/.config/omarchy/shell.json` with `{"id": "nixfred.workspace-names"}`.
-Copy `bin/workspace-name` to a directory on your `PATH`. For the shortcut, add
+Copy `bin/workspace-name` (and `bin/workspace-cycle`, if you want the arrow keys) to a directory on your `PATH`. For the shortcut, add
 to `~/.config/hypr/bindings.lua` after checking it is available:
 
 ```lua
 o.bind("SUPER + SHIFT + R", "Rename workspace", "workspace-name")
 ```
+
+### Cycling without skipping a named workspace
+
+Hyprland's `e+1` / `e-1` walk only the workspaces that **exist**, and an empty
+workspace does not exist — so the moment the last window left a titled
+workspace, the arrow keys jumped straight over it (`4 -> 6`, with 5 nowhere in
+the cycle) and its number looked like it had vanished. `bin/workspace-cycle`
+steps through the union of the existing numeric workspaces and the slots
+holding a name, so a named workspace stays reachable while it is empty. Unnamed
+empty slots are still never visited, it wraps at both ends, and it never creates
+a workspace.
+
+```lua
+o.bind("SUPER + LEFT",  "Previous workspace",   "workspace-cycle prev")
+o.bind("SUPER + RIGHT", "Next workspace (wraps)", "workspace-cycle next")
+```
+
+Named slots have no monitor of their own, so on a multi-head setup they join
+the cycle on whichever monitor is focused; existing workspaces are filtered to
+that monitor.
 
 Run `hyprctl reload` and `hyprctl configerrors`. A shell restart may be needed
 for new plugin modules: `omarchy restart shell`.
@@ -118,12 +138,17 @@ Omarchy prompt only if the editor is unavailable.
 
 ```bash
 node tests/suggestions.test.js
+node tests/workspace-ids.test.js
 bash tests/rename-helper.test.sh
+bash tests/workspace-cycle.test.sh
 omarchy plugin validate .
 ```
 
 Tests cover local suggestions, manual precedence, renumbering, the inline
-editor fallback, quoting, and concurrent name writes using temporary state.
+editor fallback, quoting, and concurrent name writes using temporary state,
+plus arrow-key cycling: a named empty workspace stays reachable, an unnamed one
+does not, the cycle wraps, and `_auto`/`_config`/the archive are never mistaken
+for workspace numbers.
 
 ## License
 
