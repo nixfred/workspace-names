@@ -76,7 +76,7 @@ Item {
     if (!root.pillEnabled) return
     if (id === undefined || id === null || id < 1) {
       var fw = Hyprland.focusedWorkspace
-      id = fw ? fw.id : -1
+      id = root.focusedId > 0 ? root.focusedId : (fw ? fw.id : -1)
     }
     if (id < 1) return
     currentId = id
@@ -186,6 +186,11 @@ Item {
     target: Hyprland
     function onRawEvent(event) {
       var n = event && event.name ? String(event.name) : ""
+      if (n === "workspacev2" || n === "workspace") {
+        root.enterWorkspace(root.eventParts(event, 2)[0])
+      } else if (n === "focusedmonv2") {
+        root.enterWorkspace(root.eventParts(event, 2)[1])
+      }
       if (n === "changeworkspaceid" || n === "renameworkspace" || n === "moveworkspace") {
         root.resync()
       }
@@ -193,23 +198,63 @@ Item {
     }
   }
 
+  // Which workspace you are on, taken from the compositor rather than from
+  // Quickshell's workspace model. The model does not apply Hyprland's
+  // "changeworkspaceid" (what plonk emits when it renumbers), so it can hold a
+  // workspace that no longer exists while missing the one you are standing on.
+  // When that happened, Hyprland.focusedWorkspace was null on arrival and the
+  // pill silently never fired for that one workspace — the model listed
+  // [-1,1,2,3,4,5,6,9] while hyprctl said [1..7] and you were on 7.
+  property int focusedId: -1
+
+  function eventParts(event, count) {
+    try { if (event && event.parse) return event.parse(count) } catch (error) {}
+    return String(event && event.data ? event.data : "").split(",")
+  }
+
+  // Every workspace switch arrives here, from "workspace"/"workspacev2" and,
+  // when the focus moves between monitors, "focusedmonv2".
+  function enterWorkspace(id) {
+    var next = Number(id)
+    if (!isFinite(next) || next < 1) return  // special / scratchpad: leave alone
+    root.focusedId = next
+    if (next === root.lastId) return
+    if (root.lastId > 0) root.direction = next > root.lastId ? 1 : -1
+    root.lastId = next
+    root.show(next)
+  }
+
+  Process {
+    id: activeProbe
+    command: ["hyprctl", "activeworkspace", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var id = -1
+        try { id = Number(JSON.parse(this.text || "{}").id) }
+        catch (error) { console.warn("workspace-names: cannot read the focused workspace: " + error) }
+        if (!isFinite(id) || id < 1) return
+        // At startup, adopt the workspace silently — arriving in the session is
+        // not a switch, and the pill should not flash at login.
+        if (root.lastId < 1) { root.lastId = id; root.focusedId = id }
+        else root.enterWorkspace(id)
+      }
+    }
+  }
+
   Connections {
     target: Hyprland
+    // Safety net only: if the raw events above ever stop arriving, the model
+    // still drives the pill. Once the compositor has told us where we are, it
+    // is the only thing that does.
     function onFocusedWorkspaceChanged() {
+      if (root.focusedId > 0) return
       var fw = Hyprland.focusedWorkspace
-      if (!fw) return
-      var id = fw.id
-      if (id < 1) return  // special / scratchpad workspaces: leave alone
-      if (root.lastId > 0 && id !== root.lastId) root.direction = id > root.lastId ? 1 : -1
-      if (id === root.lastId) return
-      root.lastId = id
-      root.show(id)
+      if (fw) root.enterWorkspace(fw.id)
     }
   }
 
   Component.onCompleted: {
-    var fw = Hyprland.focusedWorkspace
-    if (fw) root.lastId = fw.id
+    activeProbe.running = true
     clientsProbe.running = true
     root.armAutoName()
   }
@@ -267,6 +312,7 @@ Item {
   function resync() {
     Hyprland.refreshWorkspaces()
     Hyprland.refreshToplevels()
+    if (!activeProbe.running) activeProbe.running = true
   }
 
   IpcHandler {
