@@ -86,4 +86,14 @@ const live = { 1: 'Brave', 2: 'Imprint', 3: 'Sonos', 4: 'Weather', 5: 'x.com', 6
 same(api.normalize(live), live, 'a good document is not altered');
 same(api.slots(live), [1, 2, 3, 4, 5, 6]);
 
+// Control characters collapse to a space and runs of space collapse to one, so
+// nameFor agrees with the popup label instead of handing back a raw newline.
+assert.equal(api.nameFor({ 3: 'Two\nLines' }, 3), 'Two Lines', 'a newline must not survive into a name');
+assert.equal(api.nameFor({ 3: 'a\tb' }, 3), 'a b');
+assert.equal(api.nameFor({ 3: '  spaced   out  ' }, 3), 'spaced out');
+assert.equal(api.nameFor({ 3: '\u0007bell' }, 3), 'bell', 'a leading control character is not a name character');
+assert.equal(api.isRealName('\n'), false, 'a lone newline reserves nothing');
+same(api.slots({ 3: '\n' }), [], 'a control-only value is not a name');
+same(api.normalize({ 3: 'Two\nLines' }), { 3: 'Two Lines' }, 'normalize cleans the same way');
+
 console.log('Names tests passed');

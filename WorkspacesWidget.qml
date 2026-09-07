@@ -64,13 +64,35 @@ BarWidget {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parse(text())
-    onLoadFailed: root.names = ({})
+
+    // Same rule as the service: a read that fails is not a document with no
+    // names in it. Plonk rewrites this file on every compact, so a read landing
+    // in that window used to blank every name in the bar until the next change.
+    onLoadFailed: {
+      if (root.namesLoaded) {
+        console.warn("workspace-names: cannot read " + root.namesPath + "; keeping the names already loaded")
+        return
+      }
+      root.names = ({})
+      root.namesLoaded = true
+    }
   }
+
+  property bool namesLoaded: false
 
   function parse(content) {
     try {
       var parsed = JSON.parse(String(content || "{}"))
-      root.names = (parsed && typeof parsed === "object") ? parsed : ({})
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        console.warn("workspace-names: " + root.namesPath + " is not a JSON object; keeping the names already loaded")
+        return
+      }
+      // Normalize here too, not just in nameFor: labelFor hands this document
+      // to Suggestions.label, which stringifies whatever it is given. Without
+      // this the bar contradicted itself — the number drew un-named while the
+      // label read "42".
+      root.names = Names.normalize(parsed)
+      root.namesLoaded = true
     } catch (e) {
       console.warn("workspace-names: ignoring bad JSON at " + root.namesPath + ": " + e)
     }

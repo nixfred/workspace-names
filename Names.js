@@ -30,11 +30,22 @@ function isRealName(value) {
   return typeof value === "string" && /\S/.test(value);
 }
 
+// Control characters collapse to a space, runs of space collapse to one.
+// Suggestions.clean already did this to every name on its way to the popup
+// label, so a name holding a newline displayed as "Two Lines" there while
+// nameFor handed back the raw "Two\nLines" — the same document read two ways
+// inside one file. Doing it once, on load, settles it for both readers.
+// This is display shaping only: whether a value IS a name is decided by
+// isRealName above, which is the rule the shell readers share.
+function cleanName(value) {
+  return String(value).replace(/[\x00-\x1f\x7f]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 // The one true reader. Returns the trimmed name, or "" when the slot has none.
 function nameFor(names, id) {
   if (!names || typeof names !== "object") return "";
   var value = names[String(id)];
-  return isRealName(value) ? value.trim() : "";
+  return isRealName(value) ? cleanName(value) : "";
 }
 
 // Slot numbers carrying a real name, ascending. This is the set Plonk reserves
@@ -77,7 +88,7 @@ function normalize(document) {
   for (var key in document) {
     var value = document[key];
     if (isSlotKey(key)) {
-      if (isRealName(value)) out[key] = value.trim();
+      if (isRealName(value)) out[key] = cleanName(value);
       continue;
     }
     if (key.charAt(0) === "_") out[key] = value;

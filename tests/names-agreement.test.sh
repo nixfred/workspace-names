@@ -97,4 +97,27 @@ check '{"06":"Padded","6":"Six"}'               'a padded key is not workspace 6
 check '{}'                                      'an empty document'
 check '{"1":"Brave","2":"Imprint","3":"Sonos","4":"Weather","5":"x.com","6":"Pi","_auto":["5","6"]}' 'the live document from this machine'
 
+
+# --- the two QML readers must not drift apart again ------------------------
+#
+# Service.qml and WorkspacesWidget.qml each own a FileView on the same
+# document. nameFor was deduplicated into Names.js, but the load paths beside
+# it were not, and the widget kept the older one: strict nameFor said "" for
+# {"2":42} while labelFor, handed the un-normalized document, still read "42" —
+# one file contradicting itself. Cheap static checks that both went through
+# Names.normalize and neither blanks its names on a failed read.
+for qml in Service.qml WorkspacesWidget.qml; do
+  grep -q 'Names.normalize(parsed)' "$root/$qml" \
+    || { echo "FAIL: $qml does not normalize the document it loads"; exit 1; }
+  if grep -q 'onLoadFailed: root.names = ({})' "$root/$qml"; then
+    echo "FAIL: $qml still blanks every name when a read fails"; exit 1
+  fi
+  grep -q 'import "Names.js" as Names' "$root/$qml" \
+    || { echo "FAIL: $qml does not import the shared rule"; exit 1; }
+  if grep -q 'instanceof Array' "$root/$qml"; then
+    echo "FAIL: $qml uses instanceof Array, which is wrong across realms"; exit 1
+  fi
+  printf 'PASS: %s loads the document through the shared rule\n' "$qml"
+done
+
 echo "all tests passed"
