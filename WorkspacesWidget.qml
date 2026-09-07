@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 import "Suggestions.js" as Suggestions
+import "Names.js" as Names
 import "WorkspaceIds.js" as WorkspaceIds
 
 // Workspace Names — bar widget (WorkspacesWidget.qml).
@@ -39,9 +40,7 @@ BarWidget {
   function closeForPopoutSwitch() { root.close() }
 
   function nameFor(id) {
-    if (!names) return ""
-    var n = names[String(id)]
-    return (n === undefined || n === null) ? "" : String(n).trim()
+    return Names.nameFor(names, id)
   }
 
   function labelFor(id) { return Suggestions.label(root.names, root.suggestions, id) }

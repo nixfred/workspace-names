@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
 import "Suggestions.js" as Suggestions
+import "Names.js" as Names
 
 // Workspace Names — service plugin.
 //
@@ -63,9 +64,7 @@ Item {
   signal dismissed()
 
   function nameFor(id) {
-    if (!names) return ""
-    var n = names[String(id)]
-    return (n === undefined || n === null) ? "" : String(n).trim()
+    return Names.nameFor(names, id)
   }
 
   function labelFor(id) {
@@ -228,13 +227,38 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parse(text())
-    onLoadFailed: root.names = ({})
+
+    // A read that fails is not the same event as a file full of no names.
+    // Plonk rewrites this document on every compact and the rename helper
+    // rewrites it on every save; a read landing in that window used to blank
+    // every name in the bar until the next change arrived. Keep the last good
+    // document and say so once — only a genuine first run has no names, and
+    // that starts empty anyway.
+    onLoadFailed: {
+      if (root.namesLoaded) {
+        console.warn("workspace-names: cannot read " + root.namesPath + "; keeping the names already loaded")
+        return
+      }
+      root.names = ({})
+      root.namesLoaded = true
+    }
   }
+
+  // False until a read has actually produced a document, so the first failure
+  // can be told apart from a later one.
+  property bool namesLoaded: false
 
   function parse(content) {
     try {
       var parsed = JSON.parse(String(content || "{}"))
-      root.names = (parsed && typeof parsed === "object") ? parsed : ({})
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        console.warn("workspace-names: " + root.namesPath + " is not a JSON object; keeping the names already loaded")
+        return
+      }
+      // Repaired for display only. Nothing here writes the file back, so a
+      // hand-edit is rendered sanely without being silently rewritten.
+      root.names = Names.normalize(parsed)
+      root.namesLoaded = true
     } catch (e) {
       console.warn("workspace-names: ignoring bad JSON at " + root.namesPath + ": " + e)
     }

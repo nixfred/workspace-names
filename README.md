@@ -139,8 +139,10 @@ Omarchy prompt only if the editor is unavailable.
 ```bash
 node tests/suggestions.test.js
 node tests/workspace-ids.test.js
+node tests/names.test.js
 bash tests/rename-helper.test.sh
 bash tests/workspace-cycle.test.sh
+bash tests/names-agreement.test.sh
 omarchy plugin validate .
 ```
 
@@ -149,6 +151,14 @@ editor fallback, quoting, and concurrent name writes using temporary state,
 plus arrow-key cycling: a named empty workspace stays reachable, an unnamed one
 does not, the cycle wraps, and `_auto`/`_config`/the archive are never mistaken
 for workspace numbers.
+
+`names-agreement.test.sh` is the one that matters most. Four things read the
+names document — this plugin's QML, `bin/workspace-name`, `bin/workspace-cycle`
+and Plonk — and they have to mean the same thing by "this workspace has a name".
+Rather than restate the rule and compare it against itself, the test walks the
+real `bin/workspace-cycle` over a set of malformed documents and diffs the cycle
+it produces against `Names.slots()`. If either side's idea of a name drifts, it
+fails with both answers side by side.
 
 ## License
 

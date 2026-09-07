@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "nixfred.workspace-names",
   "name": "Workspace Names",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "author": "Fred Nix & Larry",
   "license": "MIT",
   "description": "Give Hyprland workspaces a title without touching their numbers. Workspaces name themselves from their windows until you rename them. Includes inline rename and a live Workspace Map with occupancy and app identities. Names live in ~/.config/omarchy/workspace-names.json.",
