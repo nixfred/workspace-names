@@ -70,9 +70,10 @@ hide the popup. The file is watched for changes.
   backups under `~/.local/state/plonk/names-backups/`.
 
 Hyprland's actual workspace names remain numeric. The widget refreshes from
-`hyprctl` on renumber events, avoiding stale Quickshell workspace IDs — for the
-focused workspace too, so the rail's highlight still lands on the right number
-after a workspace is created and renumbered underneath it.
+`hyprctl` on renumber events, avoiding stale Quickshell workspace IDs. The
+rail's highlight follows the compositor's own switch events rather than
+Quickshell's model, so it lands on the right number even after Plonk has
+renumbered the workspace you are standing on.
 
 ## Install
 

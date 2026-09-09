@@ -197,14 +197,23 @@ BarWidget {
   // Which workspace is focused, straight from the compositor. Quickshell's
   // model answers that question from the same state that ghosts renumbered
   // ids, so it is only a hint (see focusedId below).
+  //
+  // The probe is a startup and safety-net read: every switch after that is
+  // announced by the compositor itself ("workspace"/"workspacev2", or
+  // "focusedmonv2" when focus crosses monitors), and those events carry the
+  // id Hyprland actually means. A probe that was already in flight when one of
+  // those arrived is older than the event and must not overwrite it.
+  property int focusEventSerial: 0
   Process {
     id: focusProbe
+    property int startedAt: -1
     command: ["hyprctl", "activeworkspace", "-j"]
+    onRunningChanged: if (running) startedAt = root.focusEventSerial
     stdout: StdioCollector {
       onStreamFinished: {
         try {
           var id = Number(JSON.parse(this.text || "{}").id)
-          if (isFinite(id) && id > 0) root.probedFocusedId = id
+          if (isFinite(id) && id > 0 && focusProbe.startedAt === root.focusEventSerial) root.compositorFocusedId = id
         } catch (e) {
           console.warn("workspace-names: bad hyprctl activeworkspace output: " + e)
         }
@@ -216,15 +225,37 @@ BarWidget {
   Timer { id: clientsDebounce; interval: 140; onTriggered: clientsProbe.running = true }
   function probe() { probeDebounce.restart(); clientsDebounce.restart() }
   Component.onCompleted: probe()
+
+  function eventParts(event, count) {
+    try { if (event && event.parse) return event.parse(count) } catch (error) {}
+    return String(event && event.data ? event.data : "").split(",")
+  }
+  function enterWorkspace(id) {
+    var next = Number(id)
+    if (!isFinite(next) || next < 1) return  // special / scratchpad: leave alone
+    root.focusEventSerial++
+    root.compositorFocusedId = next
+  }
+
   Connections {
     target: Hyprland
     function onRawEvent(event) {
       var n = event && event.name ? String(event.name) : ""
       switch (n) {
+      case "workspace": case "workspacev2":
+        root.enterWorkspace(root.eventParts(event, 2)[0]); break
+      case "focusedmonv2":
+        root.enterWorkspace(root.eventParts(event, 2)[1]); break
       case "changeworkspaceid": case "renameworkspace": case "moveworkspace":
         // Quickshell does not apply these to its workspace model: without a
         // refresh the focused workspace stays a ghost id that is on no button,
         // and the focus capsule has nothing to sit on.
+        if (n === "changeworkspaceid") {
+          // Plonk renumbering the workspace you are standing on announces no
+          // "workspace" event of its own, so carry the focus over by hand.
+          var parts = root.eventParts(event, 2)
+          if (Number(parts[0]) === root.compositorFocusedId) root.enterWorkspace(parts[1])
+        }
         Hyprland.refreshWorkspaces()
         root.probe(); break
       case "createworkspace": case "destroyworkspace": case "openwindow":
@@ -294,19 +325,17 @@ BarWidget {
   // The focused workspace's name always lives right after the numbers (bold
   // when named, dim "Name…" when not). Click it to rename inline. Hidden on a
   // vertical bar, where there is no room beside the column.
-  // The model reacts to a focus change instantly, so it stays the primary
-  // source — but after a renumber (plonk's change_id) it can name a workspace
-  // that no longer exists. When it does, fall back to what hyprctl said: a
-  // focused id that is on no button leaves the rail with no highlight at all,
-  // which is exactly what a freshly created and renumbered workspace looked
-  // like.
-  property int probedFocusedId: -1
+  // The compositor is the only authority on which workspace is focused: the
+  // id comes from its own switch events (see enterWorkspace), with a hyprctl
+  // probe filling in at startup. Quickshell's model is consulted only until
+  // the compositor has spoken. It used to be the primary source, and after a
+  // renumber (plonk's change_id) it can carry a workspace under its OLD id —
+  // the model does not apply that event — so with Brave on 3 renumbered to 2,
+  // arriving on 2 highlighted 3, and SUPER+RIGHT looked as if it skipped a
+  // workspace. Nothing re-read the truth until the next create or destroy.
+  property int compositorFocusedId: -1
   readonly property int modelFocusedId: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
-  readonly property int focusedId: {
-    var id = root.modelFocusedId
-    if (id > 0 && (root.live === null || root.live[String(id)] !== undefined)) return id
-    return root.probedFocusedId > 0 ? root.probedFocusedId : id
-  }
+  readonly property int focusedId: root.compositorFocusedId > 0 ? root.compositorFocusedId : root.modelFocusedId
   onFocusedIdChanged: refreshIds()
   readonly property int focusedIndex: root.ids.indexOf(root.focusedId)
   readonly property color railForeground: root.bar ? root.bar.barForeground : Color.foreground
