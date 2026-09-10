@@ -15,8 +15,9 @@
 //            a padded "06" (Hyprland has no such workspace).
 //   name   — a string with at least one non-space character. A number, a bool,
 //            an array or an object is a malformed entry, not a name.
-//   auto   — the slot was named from a window title rather than typed. Plonk
-//            reads this to decide what a move may overwrite.
+//   auto   — the slot was named after the app it was running rather than
+//            typed. Plonk reads this to decide what a move may overwrite, and
+//            the service reads it to know which names may follow the app.
 //
 // Nothing here writes. Repair is applied to the in-memory view only, so a
 // hand-edited file is rendered sanely without this plugin ever rewriting the

@@ -11,25 +11,29 @@ of Workspace Names itself; it does not require a second workspace widget.
 
 1. Switch to the workspace and press **Super+Shift+R**, or right-click its number.
 2. Type a short project name and press **Enter** or **Save**.
-3. Use **Suggest** to start from its current apps and window titles.
+3. Use **Suggest** to start from the app it is running.
 4. Clear the field and save to return to automatic naming. **Esc** or **Cancel**
    leaves the saved name alone.
 
-Manual names take precedence. Automatic suggestions use local window metadata
-and never write over a name you typed.
+Manual names take precedence. A suggestion is the name of the app the
+workspace is running — "Brave", "Kitty", "Hermes", taken from the app's
+desktop entry — never a window title. Suggestions use local window metadata
+only and never write over a name you typed.
 
-**A workspace names itself.** Give a workspace its first window and, once the
-title settles (about a second), its suggestion is written to the names file as
-a real name — bold in the popup, carried by Plonk, yours to change. Renaming or
-clearing it is always the last word: clear a name and the next suggestion is
-accepted in its place. Set `"autoName": false` in `_config` to keep suggestions
-display-only.
+**A workspace names itself after its app.** Give a workspace its first window
+and, once things settle (about a second), the app's name is written to the
+names file as a real name — bold in the popup, carried by Plonk, yours to
+change. It keeps following the app: close Brave and open a terminal there and
+the name becomes "Kitty". Renaming is always the last word: a name you typed
+is never touched, and clearing it hands the slot back to the app. Set
+`"autoName": false` in `_config` to keep suggestions display-only.
 
 Automatically written names are listed in the file's `_auto` array, and typing
-a name removes it from that list. That is how Plonk tells the two apart: a name
-you typed follows its windows through any move, displacing an automatic label
-that got there first, while an automatic label reserves no workspace number and
-is dropped rather than archived when its workspace goes away.
+a name removes it from that list. That is how the plugin and Plonk tell the two
+apart: a name you typed follows its windows through any move, displacing an
+automatic label that got there first, while an automatic label reserves no
+workspace number and is dropped rather than archived when its workspace goes
+away.
 
 ## Popup
 

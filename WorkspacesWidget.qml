@@ -44,6 +44,11 @@ BarWidget {
   }
 
   function labelFor(id) { return Suggestions.label(root.names, root.suggestions, id) }
+  // Same lookup the service uses, so the Suggest button and the popup agree.
+  function appNameFor(cls) {
+    var entry = DesktopEntries.heuristicLookup(String(cls))
+    return entry && entry.name ? String(entry.name) : ""
+  }
 
   function appsFor(id) {
     var apps = root.liveApps[String(id)]
@@ -187,7 +192,7 @@ BarWidget {
           }
           for (var key in byWorkspace) byWorkspace[key].sort()
           root.liveApps = byWorkspace
-          root.suggestions = Suggestions.fromClients(arr)
+          root.suggestions = Suggestions.fromClients(arr, root.appNameFor)
         } catch (e) {
           console.warn("workspace-names: bad hyprctl clients output: " + e)
         }

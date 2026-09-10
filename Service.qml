@@ -67,6 +67,14 @@ Item {
     return Names.nameFor(names, id)
   }
 
+  // What the app calls itself, from its desktop entry ("Brave", "Hermes").
+  // The shell's lookup is heuristic (case, common suffixes); when it finds
+  // nothing, Suggestions.js derives a name from the window class instead.
+  function appNameFor(cls) {
+    var entry = DesktopEntries.heuristicLookup(String(cls))
+    return entry && entry.name ? String(entry.name) : ""
+  }
+
   function labelFor(id) {
     var n = Suggestions.label(root.names, root.suggestions, id)
     return n !== "" ? n : "Workspace " + id
@@ -105,11 +113,15 @@ Item {
   onSuggestionsChanged: { updateLabel(); armAutoName() }
 
   // ---- accept the suggestion -------------------------------------------
-  // Suggestions are recomputed from window titles constantly, so the write is
-  // held back by a short settle (a browser tab that opens as "New Tab" has
-  // usually become something meaningful by then) and only ever fills an EMPTY
-  // slot. One write at a time: the helper takes Plonk's lock, and the last
-  // thing we want is a queue of them fighting over the same file.
+  // A workspace carries the name of the app it is running unless you typed a
+  // name for it. Suggestions are recomputed on every window event, so the
+  // write is held back by a short settle, and it only ever lands on a slot
+  // that is EMPTY or whose current name was itself written automatically —
+  // the helper's --auto mode checks that under Plonk's lock, so a name you
+  // typed is never overwritten by a suggestion that was in flight. When the
+  // app changes (Brave closed, kitty opened) the automatic name follows it.
+  // One write at a time: the last thing we want is a queue of them fighting
+  // over the same file.
   property var autoPending: ({})
 
   Timer {
@@ -128,8 +140,11 @@ Item {
     for (var key in root.suggestions) {
       if (!/^[1-9][0-9]*$/.test(key)) continue
       if (root.autoPending[key]) continue
-      if (root.nameFor(key) !== "") continue
-      if (!String(root.suggestions[key] || "").trim()) continue
+      var suggested = String(root.suggestions[key] || "").trim()
+      if (!suggested) continue
+      var current = root.nameFor(key)
+      if (current === suggested) continue
+      if (current !== "" && !Names.isAuto(root.names, key)) continue
       out.push(key)
     }
     return out.sort(function (a, b) { return Number(a) - Number(b) })
@@ -145,7 +160,7 @@ Item {
     pending[id] = true
     root.autoPending = pending
     autoNameProcess.pendingId = id
-    autoNameProcess.command = [root.renameTool, "--if-unset", "-i", id, "--",
+    autoNameProcess.command = [root.renameTool, "--auto", "-i", id, "--",
                                String(root.suggestions[id]).trim()]
     autoNameProcess.running = true
   }
@@ -168,7 +183,7 @@ Item {
     command: ["hyprctl", "clients", "-j"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.suggestions = Suggestions.fromClients(JSON.parse(this.text || "[]")) }
+        try { root.suggestions = Suggestions.fromClients(JSON.parse(this.text || "[]"), root.appNameFor) }
         catch (e) { console.warn("workspace-names: cannot read popup suggestions: " + e) }
       }
     }

@@ -82,4 +82,32 @@ printf '%s\n' '{"9":"x","_auto":"nonsense"}' > "$WORKSPACE_NAMES_FILE"
 bash "$root/bin/workspace-name" --if-unset -i 3 -- 'Auto Pi'
 jq -e '._auto == ["3"] and ."9" == "x"' "$WORKSPACE_NAMES_FILE" >/dev/null
 
+# --auto: the name follows the app. It claims an empty slot, replaces a name
+# that was itself written automatically, never touches a typed one, and a
+# blank is a no-op. _auto bookkeeping matches --if-unset.
+printf '%s\n' '{}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --auto -i 4 -- 'Brave'
+jq -e '."4" == "Brave" and ._auto == ["4"]' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" --auto -i 4 -- 'Kitty'
+jq -e '."4" == "Kitty" and ._auto == ["4"]' "$WORKSPACE_NAMES_FILE" >/dev/null || { echo 'FAIL: an automatic name must follow the app'; exit 1; }
+bash "$root/bin/workspace-name" -i 4 -- 'Website redesign'
+jq -e '."4" == "Website redesign" and (has("_auto") | not)' "$WORKSPACE_NAMES_FILE" >/dev/null
+bash "$root/bin/workspace-name" --auto -i 4 -- 'Brave'
+jq -e '."4" == "Website redesign" and (has("_auto") | not)' "$WORKSPACE_NAMES_FILE" >/dev/null || { echo 'FAIL: --auto overwrote a typed name'; exit 1; }
+bash "$root/bin/workspace-name" --auto -i 4 -- '   '
+jq -e '."4" == "Website redesign"' "$WORKSPACE_NAMES_FILE" >/dev/null
+# a slot named by hand in the file (no _auto entry) counts as typed
+printf '%s\n' '{"5":"Hand edited"}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --auto -i 5 -- 'Kitty'
+jq -e '."5" == "Hand edited" and (has("_auto") | not)' "$WORKSPACE_NAMES_FILE" >/dev/null || { echo 'FAIL: --auto overwrote a hand-edited name'; exit 1; }
+# clearing an automatic name hands the slot back to the app
+printf '%s\n' '{"6":"Kitty","_auto":["6"]}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" -i 6 --clear
+bash "$root/bin/workspace-name" --auto -i 6 -- 'Brave'
+jq -e '."6" == "Brave" and ._auto == ["6"]' "$WORKSPACE_NAMES_FILE" >/dev/null
+# a damaged _auto is replaced, never propagated
+printf '%s\n' '{"9":"x","_auto":"nonsense"}' > "$WORKSPACE_NAMES_FILE"
+bash "$root/bin/workspace-name" --auto -i 3 -- 'Pi'
+jq -e '._auto == ["3"] and ."9" == "x"' "$WORKSPACE_NAMES_FILE" >/dev/null
+
 echo 'Rename helper tests passed'
