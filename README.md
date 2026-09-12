@@ -52,7 +52,7 @@ away.
 ## Popup
 
 The bar contains numbers only. Switching workspaces shows the name near the
-top of the focused screen, with an **810 ms** fully visible hold and brief
+top of the focused screen, with a **1 second** fully visible hold and brief
 **80 ms** fades. The popup is one fixed-size box in one place for every
 workspace: the workspace number sits in an accent badge on its left, and the
 name follows it, eliding if it runs long. It passes clicks through and never
@@ -62,7 +62,7 @@ Names and popup settings live in `~/.config/omarchy/workspace-names.json`:
 
 ```json
 {
-  "_config": { "pill": true, "hold": 810, "slide": 80, "topOffset": 139, "autoName": true },
+  "_config": { "pill": true, "hold": 1000, "slide": 80, "topOffset": 139, "autoName": true },
   "2": "Website redesign",
   "4": "Music"
 }

@@ -46,7 +46,7 @@ Item {
 
   // hold: fully visible milliseconds; slide: fade milliseconds; topOffset: pixels.
   readonly property var cfg: (names && typeof names._config === "object" && names._config) ? names._config : ({})
-  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 810
+  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 1000
   readonly property int slideMs: Number(cfg.slide) > 0 ? Number(cfg.slide) : 80
   readonly property int topOffset: cfg.topOffset !== undefined ? Number(cfg.topOffset) : 96
   // Disable explicitly with _config.pill = false.
