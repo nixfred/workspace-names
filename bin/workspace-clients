@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# workspace-clients — `hyprctl clients -j`, plus what each window is running.
+#
+# A window's class and title say which app it is and, sometimes, what it is
+# showing. For a terminal they say almost nothing ("foot", "pi@gus:~"), and a
+# terminal is where most of the work happens. So each client gets an activity:
+#
+#   "activity": { "command": "claude", "cwd": "/home/pi/Projects/Larry",
+#                 "home": "/home/pi", "host": "gus" }
+#
+# `command` is the terminal's foreground program: from the window's process,
+# through its shell (and any nested shells), to the first process that is not a
+# shell. An idle shell reports no command, only its directory. A window with no
+# shell under its process (a browser, an editor) gets `"activity": null`.
+#
+# Always prints a JSON array — `[]` when Hyprland is unreachable — and exits 0:
+# the callers are a bar widget and a service that poll it.
+#
+# Test seams: WORKSPACE_CLIENTS_HYPRCTL, WORKSPACE_CLIENTS_PS, WORKSPACE_CLIENTS_PROC.
+set -uo pipefail
+
+HYPRCTL=${WORKSPACE_CLIENTS_HYPRCTL:-hyprctl}
+PS_CMD=${WORKSPACE_CLIENTS_PS:-ps}
+PROC=${WORKSPACE_CLIENTS_PROC:-/proc}
+SEP=$'\x1f'  # not whitespace, so `read` keeps empty fields
+
+clients=$("$HYPRCTL" -j clients 2>/dev/null)
+jq -e 'type == "array"' <<<"$clients" >/dev/null 2>&1 || { echo '[]'; exit 0; }
+
+roots=$(jq -r '[.[].pid | select(type == "number" and . > 0)] | unique | map(tostring) | join(" ")' <<<"$clients")
+
+# window pid, its innermost shell, the foreground pid, the foreground program.
+rows=$("$PS_CMD" -eo pid=,ppid=,args= 2>/dev/null | awk -v roots="$roots" -v sep="$SEP" '
+  function base(path) { sub(/.*\//, "", path); return path }
+  function isShell(name) { return name ~ /^-?(bash|zsh|fish|sh|dash|ksh|nu|elvish|xonsh)$/ }
+  # What a process runs: argv0, or the script an interpreter was handed.
+  function program(p,   n, argv, name, i) {
+    n = split(args[p], argv, " ")
+    name = base(argv[1])
+    if (name ~ /^(node|bun|deno|python[0-9.]*|ruby|perl)$/) {
+      for (i = 2; i <= n; i++) if (argv[i] !~ /^-/) {
+        name = base(argv[i]); sub(/\.(js|mjs|cjs|ts|py|rb|pl)$/, "", name); break
+      }
+    }
+    return name
+  }
+  function newestChild(p, shellsOnly,   k, m, j, best) {
+    best = ""
+    m = split(kids[p], k, " ")
+    for (j = 1; j <= m; j++) {
+      if (shellsOnly && !isShell(program(k[j]))) continue
+      if (best == "" || k[j] + 0 > best + 0) best = k[j]
+    }
+    return best
+  }
+  {
+    pid = $1; ppid = $2; $1 = ""; $2 = ""; sub(/^ +/, "")
+    args[pid] = $0; kids[ppid] = kids[ppid] " " pid
+  }
+  END {
+    n = split(roots, r, " ")
+    for (i = 1; i <= n; i++) {
+      shell = newestChild(r[i], 1)
+      if (shell == "") continue
+      fg = ""
+      for (depth = 0; depth < 8; depth++) {
+        child = newestChild(shell, 0)
+        if (child == "") break
+        if (isShell(program(child))) { shell = child; continue }
+        fg = child; break
+      }
+      printf "%s%s%s%s%s%s%s\n", r[i], sep, shell, sep, fg, sep, (fg == "" ? "" : program(fg))
+    }
+  }')
+
+activity=$(
+  while IFS="$SEP" read -r root shell fg command; do
+    [[ -n $root ]] || continue
+    cwd=""
+    [[ -z $fg ]] || cwd=$(readlink "$PROC/$fg/cwd" 2>/dev/null)
+    [[ -n $cwd ]] || cwd=$(readlink "$PROC/$shell/cwd" 2>/dev/null)
+    printf '%s%s%s%s%s\n' "$root" "$SEP" "$command" "$SEP" "$cwd"
+  done <<<"$rows" | jq -Rn '[inputs | split("") | select(length >= 3)
+                             | {key: .[0], value: {command: .[1], cwd: .[2]}}] | from_entries'
+)
+[[ -n $activity ]] || activity='{}'
+host=$(uname -n 2>/dev/null || true)
+
+jq -c --argjson act "$activity" --arg home "${HOME:-}" --arg host "${host%%.*}" '
+  map(. + {activity: ($act[(.pid | tostring)] // null
+                      | if . == null then null else . + {home: $home, host: $host} end)})
+' <<<"$clients" 2>/dev/null || printf '%s\n' "$clients"

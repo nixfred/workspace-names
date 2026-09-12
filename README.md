@@ -11,22 +11,36 @@ of Workspace Names itself; it does not require a second workspace widget.
 
 1. Switch to the workspace and press **Super+Shift+R**, or right-click its number.
 2. Type a short project name and press **Enter** or **Save**.
-3. Use **Suggest** to start from the app it is running.
+3. Use **Suggest** to start from what it is doing right now.
 4. Clear the field and save to return to automatic naming. **Esc** or **Cancel**
    leaves the saved name alone.
 
-Manual names take precedence. A suggestion is the name of the app the
-workspace is running — "Brave", "Kitty", "Hermes", taken from the app's
-desktop entry — never a window title. Suggestions use local window metadata
-only and never write over a name you typed.
+Manual names take precedence. A suggestion says what the workspace is doing,
+from its most recently focused window:
 
-**A workspace names itself after its app.** Give a workspace its first window
-and, once things settle (about a second), the app's name is written to the
-names file as a real name — bold in the popup, carried by Plonk, yours to
-change. It keeps following the app: close Brave and open a terminal there and
-the name becomes "Kitty". Renaming is always the last word: a name you typed
-is never touched, and clearing it hands the slot back to the app. Set
-`"autoName": false` in `_config` to keep suggestions display-only.
+- **A terminal** names the program in the foreground, the project directory it
+  runs in, and the task its title names: `Claude · Larry · X post discussion`,
+  `Neovim · atmos`, `Herdr · workspaces`, or just `Terminal · blip` for an idle
+  shell. Agent spinners in the title (Claude's ✳, braille frames) are ignored,
+  so a working agent keeps one name.
+- **A browser** names the site and what is on it: `Brave · X · Mark Cuban`,
+  `Brave · YouTube · How QML works`, `Firefox · GitHub · nixfred/plonk`.
+- **Anything else** is the app's own name, plus its window title when that adds
+  something: `Hermes`, `Remote Desktop · Windows VM - Omarchy`.
+
+Names run up to 60 characters. Everything comes from local window metadata:
+`hyprctl clients` and, for terminals, the foreground process and its directory
+(`bin/workspace-clients`). Nothing leaves the machine.
+
+**A workspace names itself, and the name follows the work.** Once what a
+workspace is doing has held still for two seconds, it is written to the names
+file as a real name — bold in the popup, carried by Plonk, yours to change. Open
+a different project, switch tabs, start a new agent task, and the name updates
+by itself; the popup and the bar show the live description straight away,
+without waiting for the write. Titles are sampled once a second, so a spinning
+agent costs one small probe a second, not ten. Renaming is always the last
+word: a name you typed is never touched, and clearing it hands the slot back.
+Set `"autoName": false` in `_config` to keep suggestions display-only.
 
 Automatically written names are listed in the file's `_auto` array, and typing
 a name removes it from that list. That is how the plugin and Plonk tell the two
@@ -37,15 +51,18 @@ away.
 
 ## Popup
 
-The bar contains numbers only. Switching workspaces shows the name centered
-near the top of the focused screen, with a **750 ms** fully visible hold and
-brief **80 ms** fades. It passes clicks through and never takes keyboard focus.
+The bar contains numbers only. Switching workspaces shows the name near the
+top of the focused screen, with an **810 ms** fully visible hold and brief
+**80 ms** fades. The popup is one fixed-size box in one place for every
+workspace: the workspace number sits in an accent badge on its left, and the
+name follows it, eliding if it runs long. It passes clicks through and never
+takes keyboard focus.
 
 Names and popup settings live in `~/.config/omarchy/workspace-names.json`:
 
 ```json
 {
-  "_config": { "pill": true, "hold": 750, "slide": 80, "topOffset": 139, "autoName": true },
+  "_config": { "pill": true, "hold": 810, "slide": 80, "topOffset": 139, "autoName": true },
   "2": "Website redesign",
   "4": "Music"
 }
@@ -148,6 +165,7 @@ node tests/names.test.js
 bash tests/rename-helper.test.sh
 bash tests/workspace-cycle.test.sh
 bash tests/names-agreement.test.sh
+bash tests/workspace-clients.test.sh
 omarchy plugin validate .
 ```
 

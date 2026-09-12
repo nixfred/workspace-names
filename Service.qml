@@ -36,6 +36,9 @@ Item {
   readonly property string pluginId: "nixfred.workspace-names"
   readonly property string namesPath: Quickshell.env("HOME") + "/.config/omarchy/workspace-names.json"
   readonly property string renameTool: decodeURIComponent(String(Qt.resolvedUrl("bin/workspace-name")).replace(/^file:\/\//, ""))
+  // `hyprctl clients -j` plus each terminal's foreground program and
+  // directory, so a suggestion can say what a workspace is doing.
+  readonly property string clientsTool: decodeURIComponent(String(Qt.resolvedUrl("bin/workspace-clients")).replace(/^file:\/\//, ""))
 
   // id -> name, straight from the JSON file. Keys starting with "_" are config.
   property var names: ({})
@@ -43,7 +46,7 @@ Item {
 
   // hold: fully visible milliseconds; slide: fade milliseconds; topOffset: pixels.
   readonly property var cfg: (names && typeof names._config === "object" && names._config) ? names._config : ({})
-  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 750
+  readonly property int holdMs: Number(cfg.hold) > 0 ? Number(cfg.hold) : 810
   readonly property int slideMs: Number(cfg.slide) > 0 ? Number(cfg.slide) : 80
   readonly property int topOffset: cfg.topOffset !== undefined ? Number(cfg.topOffset) : 96
   // Disable explicitly with _config.pill = false.
@@ -109,8 +112,10 @@ Item {
       label = labelFor(currentId)
     }
   }
-  onNamesChanged: { updateLabel(); armAutoName() }
-  onSuggestionsChanged: { updateLabel(); armAutoName() }
+  onNamesChanged: { updateLabel(); armAutoName(false) }
+  // A changed suggestion restarts the settle, so a name is written once it has
+  // held still — not on every tab a browser flicks through.
+  onSuggestionsChanged: { updateLabel(); armAutoName(true) }
 
   // ---- accept the suggestion -------------------------------------------
   // A workspace carries the name of the app it is running unless you typed a
@@ -126,13 +131,15 @@ Item {
 
   Timer {
     id: autoSettle
-    interval: 1200
+    interval: 2000
     onTriggered: root.autoNameNext()
   }
 
-  function armAutoName() {
+  function armAutoName(restart) {
     if (!root.autoNameEnabled || autoNameProcess.running) return
-    if (autoNameCandidates().length && !autoSettle.running) autoSettle.start()
+    if (!autoNameCandidates().length) return
+    if (restart) autoSettle.restart()
+    else if (!autoSettle.running) autoSettle.start()
   }
 
   function autoNameCandidates() {
@@ -174,16 +181,21 @@ Item {
       root.autoPending = pending
       autoNameProcess.pendingId = ""
       namesFile.reload()
-      root.armAutoName()
+      root.armAutoName(false)
     }
   }
 
   Process {
     id: clientsProbe
-    command: ["hyprctl", "clients", "-j"]
+    command: [root.clientsTool]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.suggestions = Suggestions.fromClients(JSON.parse(this.text || "[]"), root.appNameFor) }
+        try {
+          var next = Suggestions.fromClients(JSON.parse(this.text || "[]"), root.appNameFor)
+          // Only a real change counts: reassigning an equal object would
+          // restart the auto-name settle on every probe and never write.
+          if (JSON.stringify(next) !== JSON.stringify(root.suggestions)) root.suggestions = next
+        }
         catch (e) { console.warn("workspace-names: cannot read popup suggestions: " + e) }
       }
     }
@@ -191,6 +203,15 @@ Item {
   Timer {
     id: probeDebounce
     interval: 120
+    onTriggered: if (!clientsProbe.running) clientsProbe.running = true
+  }
+  // Agents animate a spinner in their terminal title, about ten title events a
+  // second while they work. Titles are sampled once a second instead of each
+  // one launching a probe; windows opening, closing and moving still probe at
+  // once.
+  Timer {
+    id: titleThrottle
+    interval: 1000
     onTriggered: if (!clientsProbe.running) clientsProbe.running = true
   }
 
@@ -209,7 +230,11 @@ Item {
       if (n === "changeworkspaceid" || n === "renameworkspace" || n === "moveworkspace") {
         root.resync()
       }
-      if (/workspace|window/.test(n) && !probeDebounce.running) probeDebounce.start()
+      if (n === "windowtitle" || n === "windowtitlev2") {
+        if (!titleThrottle.running) titleThrottle.start()
+      } else if (/workspace|window/.test(n) && !probeDebounce.running) {
+        probeDebounce.start()
+      }
     }
   }
 
@@ -271,7 +296,7 @@ Item {
   Component.onCompleted: {
     activeProbe.running = true
     clientsProbe.running = true
-    root.armAutoName()
+    root.armAutoName(false)
   }
 
   Timer {
@@ -416,48 +441,58 @@ Item {
         id: pill
         property real shift: 0
 
-        // Centered on the focused output, below the physical top edge.
+        // One box, the same size and place for every workspace: centered on
+        // the focused output, below the physical top edge. It used to size to
+        // its label, so the number jumped sideways from one switch to the
+        // next; now the number sits at the same spot and a long name elides.
+        width: Math.round(Math.min(win.width - Style.space(48), Math.max(Style.font.title * 24, win.width * 0.42)))
+        height: Math.round(Style.font.title * 2.3)
         x: Math.round((win.width - width) / 2)
         y: root.topOffset
-        width: row.implicitWidth + pad * 2
-        height: Math.round(Style.font.title * 2.2)
         radius: Math.max(Style.cornerRadius, 4)
         color: Util.alpha(Color.popups.background, 0.96)
         border.width: Math.max(1, Style.space(1))
         border.color: Color.popups.border
         opacity: 0
 
-        readonly property int pad: Style.space(12)
+        readonly property int pad: Math.round((height - badge.height) / 2)
 
-        Row {
-          id: row
-          anchors.centerIn: parent
-          spacing: Style.space(8)
+        Rectangle {
+          id: badge
+          anchors.left: parent.left
+          anchors.leftMargin: pill.pad
+          anchors.verticalCenter: parent.verticalCenter
+          height: Math.round(Style.font.title * 1.6)
+          width: Math.max(height, numberText.implicitWidth + Style.space(12))
+          radius: Math.max(Style.cornerRadius - 2, 3)
+          color: Color.accent
 
           Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: String(root.currentId)
+            id: numberText
+            anchors.centerIn: parent
+            text: root.currentId === 10 ? "0" : String(root.currentId)
             font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: true
-            color: Color.accent
+            color: Color.popups.background
           }
-          Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 1
-            height: Style.font.title
-            color: Util.alpha(Color.popups.text, 0.35)
-          }
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.label
-            textFormat: Text.PlainText
-            font.family: Style.font.family
-            font.pixelSize: Style.font.title
-            font.bold: root.named
-            font.italic: !root.named
-            color: root.named ? Color.popups.text : Util.alpha(Color.popups.text, 0.6)
-          }
+        }
+
+        Text {
+          anchors.left: badge.right
+          anchors.leftMargin: Style.space(12)
+          anchors.right: parent.right
+          anchors.rightMargin: pill.pad + Style.space(4)
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.label
+          textFormat: Text.PlainText
+          elide: Text.ElideRight
+          maximumLineCount: 1
+          font.family: Style.font.family
+          font.pixelSize: Style.font.title
+          font.bold: root.named
+          font.italic: !root.named
+          color: root.named ? Color.popups.text : Util.alpha(Color.popups.text, 0.6)
         }
       }
     }

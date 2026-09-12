@@ -172,9 +172,13 @@ BarWidget {
       }
     }
   }
+  // `hyprctl clients -j` plus each terminal's foreground program and
+  // directory (bin/workspace-clients), so the Suggest button offers the same
+  // "Claude · Larry · X post" the popup shows.
+  readonly property string clientsTool: decodeURIComponent(String(Qt.resolvedUrl("bin/workspace-clients")).replace(/^file:\/\//, ""))
   Process {
     id: clientsProbe
-    command: ["hyprctl", "clients", "-j"]
+    command: [root.clientsTool]
     stdout: StdioCollector {
       onStreamFinished: {
         try {
@@ -192,7 +196,8 @@ BarWidget {
           }
           for (var key in byWorkspace) byWorkspace[key].sort()
           root.liveApps = byWorkspace
-          root.suggestions = Suggestions.fromClients(arr, root.appNameFor)
+          var next = Suggestions.fromClients(arr, root.appNameFor)
+          if (JSON.stringify(next) !== JSON.stringify(root.suggestions)) root.suggestions = next
         } catch (e) {
           console.warn("workspace-names: bad hyprctl clients output: " + e)
         }
@@ -228,6 +233,9 @@ BarWidget {
   }
   Timer { id: probeDebounce; interval: 120; onTriggered: { wsProbe.running = true; focusProbe.running = true } }
   Timer { id: clientsDebounce; interval: 140; onTriggered: clientsProbe.running = true }
+  // Agent spinners retitle a terminal about ten times a second; sample titles
+  // once a second rather than launching a probe for every frame.
+  Timer { id: titleThrottle; interval: 1000; onTriggered: if (!clientsProbe.running) clientsProbe.running = true }
   function probe() { probeDebounce.restart(); clientsDebounce.restart() }
   Component.onCompleted: probe()
 
@@ -266,7 +274,10 @@ BarWidget {
       case "createworkspace": case "destroyworkspace": case "openwindow":
       case "closewindow": case "movewindow": case "monitorremoved": case "monitoradded":
         root.probe(); break
-      case "windowtitle": case "windowtitlev2": case "activewindow":
+      case "windowtitle": case "windowtitlev2":
+        if (!titleThrottle.running) titleThrottle.start()
+        break
+      case "activewindow":
         if (!clientsDebounce.running) clientsDebounce.start()
         break
       }
