@@ -441,11 +441,16 @@ Item {
         id: pill
         property real shift: 0
 
-        // One box, the same size and place for every workspace: centered on
-        // the focused output, below the physical top edge. It used to size to
-        // its label, so the number jumped sideways from one switch to the
-        // next; now the number sits at the same spot and a long name elides.
-        width: Math.round(Math.min(win.width - Style.space(48), Math.max(Style.font.title * 24, win.width * 0.42)))
+        // The box is as wide as what it holds, with equal padding each side,
+        // centered on the focused output below the physical top edge. It was a
+        // fraction of the output, which on the 5120-wide 49" panel drew a box
+        // half the screen wide around two words. A very long name still stops
+        // at half the output and elides rather than spanning it.
+        readonly property int padX: Style.space(14)
+        readonly property int gap: Style.space(12)
+        readonly property int maxTextWidth: Math.round(win.width * 0.5)
+
+        width: Math.round(badge.width + gap + label.width + padX * 2)
         height: Math.round(Style.font.title * 2.3)
         x: Math.round((win.width - width) / 2)
         y: root.topOffset
@@ -455,12 +460,10 @@ Item {
         border.color: Color.popups.border
         opacity: 0
 
-        readonly property int pad: Math.round((height - badge.height) / 2)
-
         Rectangle {
           id: badge
           anchors.left: parent.left
-          anchors.leftMargin: pill.pad
+          anchors.leftMargin: pill.padX
           anchors.verticalCenter: parent.verticalCenter
           height: Math.round(Style.font.title * 1.6)
           width: Math.max(height, numberText.implicitWidth + Style.space(12))
@@ -479,11 +482,13 @@ Item {
         }
 
         Text {
+          id: label
           anchors.left: badge.right
-          anchors.leftMargin: Style.space(12)
-          anchors.right: parent.right
-          anchors.rightMargin: pill.pad + Style.space(4)
+          anchors.leftMargin: pill.gap
           anchors.verticalCenter: parent.verticalCenter
+          // Width from its own implicit width, never from the pill's: the pill
+          // measures this, so reading the pill back here would be a loop.
+          width: Math.min(implicitWidth, pill.maxTextWidth)
           text: root.label
           textFormat: Text.PlainText
           elide: Text.ElideRight

@@ -55,7 +55,8 @@ The bar contains numbers only. Switching workspaces shows the name near the
 top of the focused screen, with a **1 second** fully visible hold and brief
 **80 ms** fades. The popup is one fixed-size box in one place for every
 workspace: the workspace number sits in an accent badge on its left, and the
-name follows it, eliding if it runs long. It passes clicks through and never
+name follows it. The box is only as wide as its contents, with even padding on
+each side; a name longer than half the screen elides. It passes clicks through and never
 takes keyboard focus.
 
 Names and popup settings live in `~/.config/omarchy/workspace-names.json`:
