@@ -205,6 +205,23 @@ Item {
     interval: 120
     onTriggered: if (!clientsProbe.running) clientsProbe.running = true
   }
+  // Safety net, the same one the bar widget carries: when Quickshell's event
+  // stream goes silent the pill otherwise keeps naming a workspace you left
+  // hours ago (gus, 2026-10-01: it still said "Workspace 11" while workspace 2
+  // was focused). The focused workspace is re-read every ten seconds and the
+  // window list every thirty, so names and the pill heal themselves.
+  property int heartbeatTicks: 0
+  Timer {
+    id: heartbeat
+    interval: 10000
+    repeat: true
+    running: true
+    onTriggered: {
+      root.heartbeatTicks++
+      if (!activeProbe.running) activeProbe.running = true
+      if (root.heartbeatTicks % 3 === 0 && !clientsProbe.running) clientsProbe.running = true
+    }
+  }
   // Agents animate a spinner in their terminal title, about ten title events a
   // second while they work. Titles are sampled once a second instead of each
   // one launching a probe; windows opening, closing and moving still probe at
@@ -370,7 +387,7 @@ Item {
     function name(id: int): string { return root.nameFor(id) }
     function reload(): string { namesFile.reload(); return "ok" }
     function ping(): string { return "ok" }
-    function state(): string { return JSON.stringify({ opened: root.opened, id: root.currentId, label: root.label, holdMs: root.holdMs, topOffset: root.topOffset, fadeMs: root.slideMs }) }
+    function state(): string { return JSON.stringify({ opened: root.opened, id: root.currentId, label: root.label, holdMs: root.holdMs, topOffset: root.topOffset, fadeMs: root.slideMs, focusedId: root.focusedId, heartbeats: root.heartbeatTicks }) }
   }
 
   Variants {

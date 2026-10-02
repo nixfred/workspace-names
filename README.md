@@ -74,6 +74,22 @@ Names and popup settings live in `~/.config/omarchy/workspace-names.json`:
 inch**. Adjust it for your display; the default is 96. Set `pill` to false to
 hide the popup. The file is watched for changes.
 
+## When the shell stops hearing the compositor
+
+Quickshell's Hyprland event stream can go silent and stay silent. On gus the
+shell started two seconds after Hyprland at boot, read the workspace list once
+and never received another event: the rail showed a single number while three
+workspaces were open, and the popup still named a workspace that had been gone
+for hours. Only a shell restart fixed it.
+
+Events are still the fast path, but both the bar widget and the service now
+re-read the compositor every ten seconds (the window list every thirty), so a
+dead stream costs seconds instead of an evening. The ids are only republished
+when they actually changed, and a workspace the Quickshell model has never
+heard of triggers a model refresh, which is what the focus capsule and the
+click targets read. `omarchy-shell nixfred.workspace-names state` reports a
+`heartbeats` counter, so you can tell a stalled shell from a stalled plugin.
+
 ## Plonk and custom names
 
 - Occupied workspaces carry their saved names when Plonk renumbers them.

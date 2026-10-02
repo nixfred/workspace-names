@@ -165,6 +165,17 @@ BarWidget {
           var m = {}
           for (var i = 0; i < arr.length; i++) m[String(arr[i].id)] = Number(arr[i].windows) || 0
           root.live = m
+          // A live workspace the model has never heard of means the event
+          // stream missed it. Heal the model, which the capsule and the click
+          // targets read. Ghost ids the model keeps are ignored on purpose:
+          // refreshWorkspaces() cannot prune them, and comparing both ways
+          // would re-refresh forever.
+          var known = {}
+          var values = Hyprland.workspaces.values
+          for (var k = 0; k < values.length; k++) known[String(values[k].id)] = true
+          for (var id in m) {
+            if (!known[id]) { Hyprland.refreshWorkspaces(); break }
+          }
         } catch (e) {
           console.warn("workspace-names: bad hyprctl workspaces output: " + e)
         }
@@ -232,6 +243,24 @@ BarWidget {
     }
   }
   Timer { id: probeDebounce; interval: 120; onTriggered: { wsProbe.running = true; focusProbe.running = true } }
+  // Safety net. Quickshell's Hyprland event stream can go silent and stay
+  // silent: on gus (2026-10-01) the shell started two seconds after Hyprland
+  // at boot, took its workspace list once and never received another event, so
+  // the rail showed a single number while three workspaces were open and only
+  // a shell restart fixed it. Events stay the fast path; this re-reads the
+  // compositor every ten seconds, so a dead stream costs seconds rather than
+  // an evening. Two short hyprctl reads per ten seconds is nothing, and the
+  // ids are only republished when they actually changed.
+  Timer {
+    id: heartbeat
+    interval: 10000
+    repeat: true
+    running: true
+    onTriggered: {
+      if (!wsProbe.running) wsProbe.running = true
+      if (!focusProbe.running) focusProbe.running = true
+    }
+  }
   Timer { id: clientsDebounce; interval: 140; onTriggered: clientsProbe.running = true }
   // Agent spinners retitle a terminal about ten times a second; sample titles
   // once a second rather than launching a probe for every frame.
