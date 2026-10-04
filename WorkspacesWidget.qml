@@ -198,7 +198,7 @@ BarWidget {
           for (var i = 0; i < arr.length; i++) {
             var client = arr[i] || {}
             var id = client.workspace ? Number(client.workspace.id) : 0
-            if (id < 1 || id > 10) continue
+            if (id < 1) continue   // specials only; any real workspace counts
             var label = String(client.class || client.initialClass || "App").trim()
             if (!label) label = "App"
             var key = String(id)
