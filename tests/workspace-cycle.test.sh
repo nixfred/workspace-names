@@ -102,6 +102,19 @@ printf '%s\n' '{}' > "$WORKSPACE_NAMES_FILE"
 [[ $(went 1 next) == 3 ]] || fail "a non-numeric workspace must stay out of the cycle"
 pass "non-numeric (special) workspaces stay out of the cycle"
 
+# The shape that bit Fred on 2026-10-04: Orca's "pharos" workspace is always
+# alive with a NEGATIVE id and a bare name. Hyprland's own e+1 walks onto it,
+# so RIGHT from the last numbered workspace showed a blank screen and needed a
+# second press to reach workspace 1. The cycle must step straight over it.
+printf '%s\n' '[{"id":1,"name":"1","monitor":"eDP-1","windows":1},
+                {"id":-1337,"name":"pharos","monitor":"eDP-1","windows":0},
+                {"id":-98,"name":"special:quakefull","monitor":"eDP-1","windows":1},
+                {"id":2,"name":"2","monitor":"eDP-1","windows":1}]' > "$WS"
+printf '%s\n' '{}' > "$WORKSPACE_NAMES_FILE"
+[[ $(went 2 next) == 1 ]] || fail "next from the last workspace must wrap to 1, not a special, got $(went 2 next)"
+[[ $(went 1 prev) == 2 ]] || fail "prev from 1 must wrap to the last workspace, got $(went 1 prev)"
+pass "special workspaces are never a stop, in either direction"
+
 # A bad direction is a usage error, not a silent no-op.
 if bash "$root/bin/workspace-cycle" sideways 2>/dev/null; then
   fail "an unknown direction must exit non-zero"

@@ -144,6 +144,15 @@ o.bind("SUPER + LEFT",  "Previous workspace",   "workspace-cycle prev")
 o.bind("SUPER + RIGHT", "Next workspace (wraps)", "workspace-cycle next")
 ```
 
+Do not be tempted back to Hyprland's own `e-1` / `e+1`: they walk every
+workspace that exists, and that includes the special ones. A desktop running
+Orca keeps `pharos` (id -1337) alive permanently, so RIGHT from the last
+numbered workspace lands on a blank screen and takes a second press to reach
+workspace 1. `workspace-cycle` walks numbered workspaces and named slots only.
+
+```
+```
+
 Named slots have no monitor of their own, so on a multi-head setup they join
 the cycle on whichever monitor is focused; existing workspaces are filtered to
 that monitor.
