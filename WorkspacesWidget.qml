@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Suggestions.js" as Suggestions
 import "Names.js" as Names
@@ -383,8 +384,8 @@ BarWidget {
   readonly property int focusedId: root.compositorFocusedId > 0 ? root.compositorFocusedId : root.modelFocusedId
   onFocusedIdChanged: refreshIds()
   readonly property int focusedIndex: root.ids.indexOf(root.focusedId)
-  readonly property color railForeground: root.bar ? root.bar.barForeground : Color.foreground
-  readonly property color capsuleText: root.bar ? root.bar.themeContrastForeground : Color.background
+  readonly property color railForeground: root.bar ? root.bar.barForeground : Commons.Color.foreground
+  readonly property color capsuleText: root.bar ? root.bar.themeContrastForeground : Commons.Color.background
   readonly property real slotExtent: Style.spaceReal(24)
   readonly property real capsuleThickness: Style.spaceReal(22)
   readonly property real targetStart: Math.max(0, root.focusedIndex) * root.slotExtent
@@ -427,8 +428,8 @@ BarWidget {
       font.bold: root.focusedName !== ""
       font.italic: root.focusedName === ""
       color: {
-        var fg = root.bar ? root.bar.barForeground : Color.foreground
-        if (titleMouse.containsMouse) return Style.hoverStateColor(fg, Color.accent)
+        var fg = root.bar ? root.bar.barForeground : Commons.Color.foreground
+        if (titleMouse.containsMouse) return Style.hoverStateColor(fg, Commons.Color.accent)
         return root.focusedName !== "" ? fg : Util.alpha(fg, 0.55)
       }
       Behavior on color { ColorAnimation { duration: 120 } }
@@ -478,13 +479,13 @@ BarWidget {
             font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: true
-            color: Color.popups.text
+            color: Commons.Color.popups.text
           }
           Text {
             text: "↑↓ select · Enter switch · Right-click rename · Esc close"
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            color: Util.alpha(Color.popups.text, 0.58)
+            color: Util.alpha(Commons.Color.popups.text, 0.58)
           }
 
           Repeater {
@@ -495,9 +496,9 @@ BarWidget {
               Layout.fillWidth: true
               implicitHeight: Style.space(42)
               radius: Math.max(4, Style.cornerRadius)
-              color: index === root.mapCursor ? Util.alpha(Color.accent, 0.18) : "transparent"
+              color: index === root.mapCursor ? Util.alpha(Commons.Color.accent, 0.18) : "transparent"
               border.width: modelData === root.focusedId ? 1 : 0
-              border.color: Color.accent
+              border.color: Commons.Color.accent
 
               RowLayout {
                 anchors.fill: parent
@@ -509,7 +510,7 @@ BarWidget {
                   font.family: Style.font.family
                   font.pixelSize: Style.font.title
                   font.bold: true
-                  color: Color.accent
+                  color: Commons.Color.accent
                   Layout.preferredWidth: Style.space(18)
                 }
                 ColumnLayout {
@@ -522,7 +523,7 @@ BarWidget {
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     font.bold: root.nameFor(modelData) !== ""
-                    color: Color.popups.text
+                    color: Commons.Color.popups.text
                   }
                   Text {
                     Layout.fillWidth: true
@@ -530,14 +531,14 @@ BarWidget {
                     elide: Text.ElideRight
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
-                    color: Util.alpha(Color.popups.text, 0.56)
+                    color: Util.alpha(Commons.Color.popups.text, 0.56)
                   }
                 }
                 Text {
                   text: root.liveWindows(modelData) > 0 ? String(root.liveWindows(modelData)) : ""
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
-                  color: Util.alpha(Color.popups.text, 0.65)
+                  color: Util.alpha(Commons.Color.popups.text, 0.65)
                 }
               }
               MouseArea {
@@ -581,7 +582,7 @@ BarWidget {
       width: root.vertical ? root.capsuleThickness : Math.max(1, root.animatedEnd - root.animatedStart)
       height: root.vertical ? Math.max(1, root.animatedEnd - root.animatedStart) : root.capsuleThickness
       radius: Math.min(width, height) / 2
-      color: Color.accent
+      color: Commons.Color.accent
       border.width: Style.space(1)
       border.color: Util.alpha(root.railForeground, 0.52)
       Behavior on color { ColorAnimation { duration: 180 } }
@@ -712,7 +713,7 @@ BarWidget {
               font.pixelSize: Style.font.body
               font.bold: button.named
               font.italic: !button.named
-              color: button.named ? Color.popups.text : Util.alpha(Color.popups.text, 0.6)
+              color: button.named ? Commons.Color.popups.text : Util.alpha(Commons.Color.popups.text, 0.6)
             }
             MouseArea {
               anchors.fill: parent
@@ -776,7 +777,7 @@ BarWidget {
               font.family: Style.font.family
               font.pixelSize: Style.font.title
               font.bold: true
-              color: Color.accent
+              color: Commons.Color.accent
               Layout.alignment: Qt.AlignVCenter
             }
             TextField {
@@ -794,7 +795,7 @@ BarWidget {
               wrapMode: Text.WordWrap
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              color: button.saveError ? Color.accent : Util.alpha(Color.popups.text, 0.65)
+              color: button.saveError ? Commons.Color.accent : Util.alpha(Commons.Color.popups.text, 0.65)
             }
             RowLayout {
               Layout.fillWidth: true

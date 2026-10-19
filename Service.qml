@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Commons as Commons
 import "Suggestions.js" as Suggestions
 import "Names.js" as Names
 
@@ -472,9 +473,9 @@ Item {
         x: Math.round((win.width - width) / 2)
         y: root.topOffset
         radius: Math.max(Style.cornerRadius, 4)
-        color: Util.alpha(Color.popups.background, 0.96)
+        color: Util.alpha(Commons.Color.popups.background, 0.96)
         border.width: Math.max(1, Style.space(1))
-        border.color: Color.popups.border
+        border.color: Commons.Color.popups.border
         opacity: 0
 
         Rectangle {
@@ -485,7 +486,7 @@ Item {
           height: Math.round(Style.font.title * 1.6)
           width: Math.max(height, numberText.implicitWidth + Style.space(12))
           radius: Math.max(Style.cornerRadius - 2, 3)
-          color: Color.accent
+          color: Commons.Color.accent
 
           Text {
             id: numberText
@@ -494,7 +495,7 @@ Item {
             font.family: Style.font.family
             font.pixelSize: Style.font.title
             font.bold: true
-            color: Color.popups.background
+            color: Commons.Color.popups.background
           }
         }
 
@@ -514,7 +515,7 @@ Item {
           font.pixelSize: Style.font.title
           font.bold: root.named
           font.italic: !root.named
-          color: root.named ? Color.popups.text : Util.alpha(Color.popups.text, 0.6)
+          color: root.named ? Commons.Color.popups.text : Util.alpha(Commons.Color.popups.text, 0.6)
         }
       }
     }
